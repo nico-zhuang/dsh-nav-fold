@@ -76,5 +76,10 @@
     headline.textContent = '收起导航，留下空间。';
     details.textContent = '一条细线切换布局。图标等距排列，侧栏变化时自然跟随。';
   }
+  if (mode === 'demo') {
+    const script = document.createElement('script');
+    script.src = 'demo.js';
+    document.body.append(script);
+  }
 </script>
 </html>
