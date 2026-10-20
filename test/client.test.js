@@ -37,8 +37,8 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   assert.equal(nav.querySelectorAll('button[class*="panelRow"]').length, 2);
   assert.equal(nav.querySelector('button[class*="panelRow"]').getAttribute('aria-label'), 'Plugins');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
-  assert.match(css, /overflow-x:\s*auto/);
-  assert.match(css, /white-space:\s*nowrap/);
+  assert.match(css, /flex-wrap:\s*wrap/);
+  assert.doesNotMatch(css, /overflow-x:\s*auto/);
   assert.match(css, /panelTitle/);
   assert.match(css, /panelGlyph/);
   assert.match(css, /data-sidebar-nav-collapsed/);
@@ -46,6 +46,23 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   assert.equal(dom.window.localStorage.getItem('dsh-sidebar-nav-collapse'), 'expanded');
+  dispose();
+});
+
+test('both states share a full-width slim top bar with a legible SVG icon', () => {
+  const { doc, dispose } = start();
+  const nav = doc.querySelector('nav');
+  const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
+  const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+  assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-top:\s*28px/);
+  assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;[^}]*height:\s*24px/);
+  assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*20px;[^}]*height:\s*20px/);
+  assert.equal(toggle.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
+  const closedPath = toggle.querySelector('path')?.getAttribute('d');
+  toggle.click();
+  assert.equal(nav.querySelectorAll('[data-sidebar-nav-toggle]').length, 1);
+  assert.notEqual(toggle.querySelector('path')?.getAttribute('d'), closedPath);
+  assert.equal(nav.nextElementSibling.id, 'workspaces');
   dispose();
 });
 
