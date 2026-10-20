@@ -24,7 +24,7 @@ function start(html = navigation(), savedState, savedOrder, setup) {
   client.apply({ effect: (fn) => { disposers.push(fn()); } });
   return { dom, dispose: () => { for (const fn of disposers.reverse()) fn(); }, doc: dom.window.document };
 }
-const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
+const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
 test('collapse is a keyboard-accessible icon strip scoped to global nav; workspace remains intact', () => {
   const { doc, dom, dispose } = start();
@@ -78,85 +78,26 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   dispose();
 });
 
-test('folded icon spacing stays equal and width changes retarget motion', () => {
-  let observer;
-  let disconnected = false;
-  const played = [];
-  let canceled = 0;
-  let reduced = false;
-  const { doc, dom, dispose } = start(navigation(), undefined, undefined, win => {
-    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe(element) { this.target = element; } unobserve(element) { if (this.target === element) this.target = null; } disconnect() { disconnected = true; } };
-    win.matchMedia = () => ({ matches: reduced });
-    win.Element.prototype.animate = function (frames) { played.push({ element: this, frames }); return { cancel() { canceled++; } }; };
+test('startup never subscribes to ResizeObserver; native grid owns sidebar width', () => {
+  let created = 0;
+  const { doc, dispose } = start(navigation(), undefined, undefined, win => {
+    win.ResizeObserver = class { constructor() { created++; } observe() {} unobserve() {} disconnect() {} };
   });
-  const nav = doc.querySelector('nav');
+  assert.equal(created, 0, 'layout observers on plugin startup must not contribute to loading starvation');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+  assert.match(css, /grid-template-columns:\s*repeat\(auto-fit,\s*36px\)/);
   assert.match(css, /justify-content:\s*space-evenly/);
-  assert.match(css, /column-gap:\s*0/);
-  assert.equal(observer.target, nav);
-  const rows = nav.querySelectorAll('[class*="panelRow"]');
-  let width = 140;
-  nav.getBoundingClientRect = () => ({ width });
-  rows.forEach((row, index) => { row.getBoundingClientRect = () => ({ left: index * (width - 36), top: 0 }); });
-  observer.callback([{ target: nav }]);
-  width = 200;
-  observer.callback([{ target: nav }]);
-  assert.ok(played.some(({ element }) => element === rows[1]), 'resize should animate an icon from previous position');
-  const count = played.length;
-  reduced = true;
-  width = 220;
-  observer.callback([{ target: nav }]);
-  assert.equal(played.length, count);
-  reduced = false;
-  width = 240;
-  observer.callback([{ target: nav }]);
-  const beforeToggle = canceled;
-  nav.querySelector('[data-sidebar-nav-toggle]').click();
-  assert.ok(canceled > beforeToggle, 'toggle should interrupt pending resize animation');
   dispose();
-  assert.equal(disconnected, true);
 });
 
-test('a hovered long label grows when the sidebar widens', () => {
-  let observer, width = 120;
-  const { doc, dom, dispose } = start(navigation('A long panel name'), undefined, undefined, win => {
-    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe() {} unobserve() {} disconnect() {} };
-  });
-  const nav = doc.querySelector('nav');
-  const button = nav.querySelector('[data-sidebar-nav-toggle]');
-  Object.defineProperty(button, 'clientWidth', { get: () => width });
+test('hover label uses CSS max-width to follow sidebar changes without JavaScript observation', () => {
+  const { doc, dom, dispose } = start(navigation('A long panel name'));
+  const nav = doc.querySelector('nav'), button = nav.querySelector('[data-sidebar-nav-toggle]');
   for (const label of button.querySelectorAll('[data-sidebar-label]')) label.getBoundingClientRect = () => ({ width: 180 });
   nav.querySelector('[aria-label="A long panel name"]').dispatchEvent(new dom.window.MouseEvent('pointerover', { bubbles: true }));
-  assert.equal(button.querySelector('[data-sidebar-toggle-center]').style.width, '88px');
-  width = 260;
-  observer.callback([{ target: nav }]);
   assert.equal(button.querySelector('[data-sidebar-toggle-center]').style.width, '196px');
-  dispose();
-});
-
-test('rapid consecutive sidebar resizes continue from previous on-screen icon position', () => {
-  let observer, second, offset = 0, width = 140;
-  const frames = [];
-  const { doc, dispose } = start(navigation(), undefined, undefined, win => {
-    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe() {} unobserve() {} disconnect() {} };
-    win.Element.prototype.animate = function (keyframes) {
-      if (this === second) frames.push(keyframes);
-      const target = this;
-      return { cancel() { if (target === second) offset = 0; } };
-    };
-  });
-  const nav = doc.querySelector('nav');
-  second = nav.querySelectorAll('[class*="panelRow"]')[1];
-  nav.getBoundingClientRect = () => ({ width });
-  second.getBoundingClientRect = () => ({ left: width - 36 + offset, top: 0 });
-  observer.callback([{ target: nav }]);
-  width = 200;
-  observer.callback([{ target: nav }]);
-  assert.equal(frames.at(-1)[0].transform, 'translate(-60px, 0px)');
-  offset = -20; // mid-flight transform measured after the layout already jumped to the next width
-  width = 220;
-  observer.callback([{ target: nav }]);
-  assert.equal(frames.at(-1)[0].transform, 'translate(-40px, 0px)');
+  const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+  assert.match(css, /max-width:\s*calc\(100% - 32px\)/);
   dispose();
 });
 
@@ -190,6 +131,95 @@ test('toggle animates icon placement and bar travel, cancels fast reversals, res
   assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
   assert.equal(played.length, firstCount * 2);
   dispose();
+});
+
+test('host title restoration cannot create an observer feedback loop', async () => {
+  let Native, deliveries = 0, capped = false;
+  const { doc, dom, dispose } = start(navigation(), undefined, undefined, win => {
+    Native = win.MutationObserver;
+    win.MutationObserver = class extends Native { constructor(callback) { super(records => { if (++deliveries > 24) { capped = true; this.disconnect(); return; } callback(records); }); } };
+  });
+  const nav = doc.querySelector('nav'), row = nav.querySelector('[class*="panelRow"]');
+  const peer = new Native(() => { if (!row.hasAttribute('title')) row.title = 'Host hint'; });
+  peer.observe(row, { attributes: true, attributeFilter: ['title'] });
+  try {
+    row.title = 'Host hint';
+    nav.insertAdjacentHTML('beforeend', panel('Future'));
+    await flush();
+    assert.equal(capped, false, 'title ownership must not starve the event loop');
+    assert.ok(deliveries < 5);
+    peer.disconnect();
+    row.title = 'Updated host hint';
+    row.dispatchEvent(new dom.window.MouseEvent('pointerover', { bubbles: true }));
+    assert.equal(row.hasAttribute('title'), false, 'suppress native hint on actual hover without continuously policing title');
+    nav.querySelector('[data-sidebar-nav-toggle]').click();
+    assert.equal(row.title, 'Updated host hint');
+  } finally { peer.disconnect(); dispose(); }
+});
+
+test('host rejecting the injected toggle falls back to native nav instead of reinjecting forever', async () => {
+  let Native, deliveries = 0, capped = false;
+  const { doc, dispose } = start(navigation(), undefined, undefined, win => {
+    Native = win.MutationObserver;
+    win.MutationObserver = class extends Native { constructor(callback) { super(records => { if (++deliveries > 24) { capped = true; this.disconnect(); return; } callback(records); }); } };
+  });
+  const nav = doc.querySelector('nav');
+  const peer = new Native(() => nav.querySelector('[data-sidebar-nav-toggle]')?.remove());
+  peer.observe(nav, { childList: true });
+  try {
+    nav.querySelector('[data-sidebar-nav-toggle]').remove();
+    await flush();
+    assert.equal(capped, false, 'a rejected control must not be reinserted in an endless microtask loop');
+    assert.equal(nav.querySelector('[data-sidebar-nav-toggle]'), null);
+    assert.equal(nav.hasAttribute('data-sidebar-nav-collapsed'), false);
+    assert.equal(nav.querySelector('[class*="panelRow"]').draggable, false);
+  } finally { peer.disconnect(); dispose(); }
+});
+
+test('repeated host row replacement cannot continually reinject the removed control', async () => {
+  let Native, deliveries = 0, capped = false;
+  const { doc, dispose } = start(navigation(), undefined, undefined, win => {
+    Native = win.MutationObserver;
+    win.MutationObserver = class extends Native { constructor(callback) { super(records => { if (++deliveries > 24) { capped = true; this.disconnect(); return; } callback(records); }); } };
+  });
+  const nav = doc.querySelector('nav');
+  let replacements = 0;
+  const peer = new Native(() => {
+    if (nav.querySelector(':scope > [data-sidebar-nav-toggle]')) {
+      replacements++;
+      nav.replaceChildren(...[...nav.querySelectorAll(':scope > button[class*="panelRow"]')].map(row => row.cloneNode(true)));
+    }
+  });
+  peer.observe(nav, { childList: true });
+  try {
+    nav.append(doc.createElement('span'));
+    await new Promise(resolve => setTimeout(resolve, 60));
+    assert.equal(capped, false);
+    assert.ok(replacements <= 2, 'a host that owns the row list must not be fought indefinitely');
+    assert.equal(nav.querySelector('[data-sidebar-nav-toggle]'), null);
+    assert.equal(nav.hasAttribute('data-sidebar-nav-collapsed'), false);
+  } finally { peer.disconnect(); dispose(); }
+});
+
+test('unrelated conversation mutations do not rescan or rewrite global navigation', async () => {
+  const { doc, dispose } = start();
+  const query = doc.querySelectorAll.bind(doc); let scans = 0;
+  doc.querySelectorAll = selector => { if (selector === 'nav[class*="panelList"]') scans++; return query(selector); };
+  const conversation = doc.createElement('div'); conversation.setAttribute('aria-label', 'Conversation');
+  doc.body.append(conversation); conversation.append(doc.createElement('p')); conversation.setAttribute('aria-label', 'Reply');
+  await flush();
+  assert.equal(scans, 0);
+  dispose();
+});
+
+test('disposing with a queued navigation sync cannot recreate controls', async () => {
+  const { doc, dispose } = start();
+  doc.querySelector('nav').insertAdjacentHTML('beforeend', panel('Queued'));
+  await Promise.resolve();
+  dispose();
+  await flush();
+  assert.equal(doc.querySelector('[data-sidebar-nav-toggle]'), null);
+  assert.equal(doc.querySelector('nav').hasAttribute('data-sidebar-nav-collapsed'), false);
 });
 
 test('persistent choice, future panel entries and sidebar remount keep same state', async () => {
