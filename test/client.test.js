@@ -17,7 +17,7 @@ function start(html = navigation(), savedState, savedOrder) {
   const code = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
   assert.match(code, /window\.__ModuleLoader__\.load/, 'client bundle must exist');
   vm.runInNewContext(code, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver });
-  assert.equal(bundle.id, 'dsh-sidebar-nav-collapse');
+  assert.equal(bundle.id, 'dsh-nav-fold');
   const client = bundle.factory(() => { throw Error('unexpected dependency'); });
   const disposers = [];
   client.apply({ effect: (fn) => { disposers.push(fn()); } });
@@ -50,17 +50,19 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   dispose();
 });
 
-test('both states share a full-width slim top bar with a legible SVG icon', () => {
+test('both states share a full-width slim bottom line with a legible SVG icon', () => {
   const { doc, dispose } = start();
   const nav = doc.querySelector('nav');
   const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
-  assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-top:\s*24px/);
-  assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;[^}]*height:\s*24px/);
+  assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-bottom:\s*24px/);
+  assert.match(css, /align-content:\s*flex-start/, 'wrapped rows must not stretch while nav height animates');
+  assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*position:\s*absolute;[^}]*bottom:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;[^}]*height:\s*24px/);
   assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*border:\s*0;[^}]*background:\s*transparent/);
   assert.match(css, /\[data-sidebar-nav-toggle\]::before[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]::after[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*14px;[^}]*height:\s*14px/);
+  assert.equal(nav.lastElementChild, toggle, 'visual bottom toggle should also be last in keyboard focus order');
   assert.equal(toggle.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
   const closedPath = toggle.querySelector('path')?.getAttribute('d');
   toggle.click();
@@ -70,12 +72,45 @@ test('both states share a full-width slim top bar with a legible SVG icon', () =
   dispose();
 });
 
+test('toggle animates icon placement and bar travel, cancels fast reversals, respects reduced motion', () => {
+  const { doc, dom, dispose } = start();
+  const nav = doc.querySelector('nav');
+  const rows = [...nav.querySelectorAll('[class*="panelRow"]')];
+  const currentHeight = () => nav.dataset.sidebarNavCollapsed === 'true' ? 80 : 160;
+  const getStyle = dom.window.getComputedStyle.bind(dom.window);
+  dom.window.getComputedStyle = el => el === nav ? { height: `${currentHeight()}px` } : getStyle(el);
+  nav.getBoundingClientRect = () => ({ left: 0, top: 0, width: 180, height: currentHeight() });
+  rows.forEach((row, index) => { row.getBoundingClientRect = () => nav.dataset.sidebarNavCollapsed === 'true' ? { left: index * 40, top: 0 } : { left: 0, top: index * 40 }; });
+  dom.window.matchMedia = () => ({ matches: false });
+  const played = [];
+  let canceled = 0;
+  dom.window.Element.prototype.animate = function (frames, options) {
+    played.push({ element: this, frames, options });
+    return { cancel() { canceled++; } };
+  };
+  const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
+  toggle.click();
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
+  assert.deepEqual(Array.from(played.find(item => item.element === nav).frames, frame => frame.height), ['80px', '160px']);
+  assert.equal(played.find(item => item.element === rows[1]).frames[0].transform, 'translate(40px, -40px)');
+  const firstCount = played.length;
+  toggle.click();
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'true');
+  assert.equal(canceled, firstCount);
+  dom.window.matchMedia = () => ({ matches: true });
+  toggle.click();
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
+  assert.equal(played.length, firstCount * 2);
+  dispose();
+});
+
 test('persistent choice, future panel entries and sidebar remount keep same state', async () => {
   const { doc, dom, dispose } = start();
   const nav = doc.querySelector('nav');
   nav.querySelector('[data-sidebar-nav-toggle]').click();
   nav.insertAdjacentHTML('beforeend', panel('Future plugin'));
   await flush();
+  assert.equal(nav.lastElementChild, nav.querySelector('[data-sidebar-nav-toggle]'));
   assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
   assert.equal(nav.querySelectorAll('[data-sidebar-nav-toggle]').length, 1);
   nav.outerHTML = navigation('New plugin').replace('<div id="workspaces">Workspace and sessions</div>', '');
