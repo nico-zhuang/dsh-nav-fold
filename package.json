@@ -1,10 +1,10 @@
 {
   "name": "dsh-nav-fold",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "DSH 0.2.1-rc.2 global sidebar panel icon strip",
+  "description": "Minimal, fluid global navigation folding for DeepSeek Harness",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

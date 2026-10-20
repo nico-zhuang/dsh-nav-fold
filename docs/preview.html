@@ -2,34 +2,31 @@
 <html lang="zh-CN">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dsh-nav-fold 匿名演示｜全部名称均为虚拟数据</title>
+<title>dsh-nav-fold · 匿名示意</title>
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; background: #17191f; color: #f5f5f7; font: 15px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
-  .canvas { width: 920px; height: 570px; display: flex; gap: 25px; padding: 25px; background: radial-gradient(circle at 85% 15%, #262b38, #16181f 60%); }
-  .sidebar { width: 350px; padding: 23px 22px; border: 1px solid #494d58; border-radius: 16px; background: linear-gradient(#32343d,#282a32); flex: none; box-shadow: 0 20px 40px #0005; }
-  .window { display: flex; gap: 8px; }
-  .dot { width: 12px; height: 12px; border-radius: 50%; background: #ff6464; }
-  .dot:nth-child(2) { background: #ffcd39; } .dot:nth-child(3) { background: #35d66f; }
-  .brand { margin: 29px 0 28px; font-size: 23px; font-weight: 750; letter-spacing: -.6px; }
-  .brand small { margin-left: 6px; padding: 2px 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 10px; vertical-align: middle; letter-spacing: 0; }
-  .new { width: 100%; padding: 12px 0; text-align: center; border: 1px solid #7779; border-radius: 9px; background: #ffffff1d; font-size: 18px; }
-  nav.x_panelList { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+  body { margin: 0; background: #11151b; color: #f2f4f7; font: 15px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+  .canvas { width: 1024px; height: 640px; display: flex; gap: 68px; padding: 44px 48px; background: radial-gradient(circle at 68% 3%, #25323a 0, #161b23 38%, #11151b 85%); }
+  .sidebar { width: 376px; padding: 29px 26px; border: 1px solid #ffffff1d; border-radius: 19px; background: linear-gradient(165deg, #30343e, #242830); flex: none; box-shadow: 0 26px 60px #05080d80; }
+  .brand { margin: 4px 0 30px; font-size: 23px; font-weight: 760; letter-spacing: -.8px; }
+  .brand small { margin-left: 6px; padding: 2px 6px; border: 1px solid #c6ccd4; border-radius: 3px; font-size: 10px; vertical-align: middle; letter-spacing: 0; }
+  .new { width: 100%; padding: 12px 0; text-align: center; border: 1px solid #ffffff38; border-radius: 9px; background: #ffffff16; font-size: 17px; }
+  nav.x_panelList { display: flex; flex-direction: column; gap: 4px; margin-top: 19px; }
   button.x_panelRow { display: flex; align-items: center; gap: 10px; min-height: 36px; border: 0; border-radius: 6px; background: transparent; color: inherit; text-align: left; cursor: pointer; padding: 5px 8px; font: inherit; }
   button.x_panelRow:hover { background: #ffffff18; }
   .x_panelGlyph { width: 20px; font-size: 22px; line-height: 1; text-align: center; flex: none; }
   .x_panelTitle { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .workspaces { border-top: 1px solid #ffffff2b; margin-top: 20px; padding-top: 15px; color: #b9bbc3; }
-  .workspaces div { padding: 10px; color: #e8e8ed; }
-  .notes { flex: 1; padding: 36px 15px 15px; }
-  .eyebrow { font-size: 13px; letter-spacing: 2px; color: #91bfff; }
-  h1 { font-size: 30px; margin: 16px 0 22px; line-height: 1.35; }
-  .notes p { color: #c8cbd6; line-height: 1.9; font-size: 16px; }
-  .note { margin-top: 70px; padding: 14px; border: 1px solid #ffffff26; border-radius: 8px; font-size: 12px; color: #b5b7c3; }
+  .workspaces { border-top: 1px solid #ffffff29; margin-top: 21px; padding-top: 17px; color: #adb6c2; }
+  .workspaces div { padding: 12px 9px; color: #e1e6ec; }
+  .notes { flex: 1; min-width: 0; position: relative; padding: 52px 4px 0; }
+  .eyebrow { font-size: 12px; letter-spacing: 2.8px; color: #a6c8d4; }
+  h1 { margin: 34px 0 24px; font-size: 40px; font-weight: 670; line-height: 1.2; letter-spacing: -.04em; }
+  .hairline { width: 100%; height: 1px; background: linear-gradient(90deg, #d7e2e877, transparent); }
+  .notes p { margin: 25px 0 0; max-width: 400px; color: #bac5cf; font-size: 16px; line-height: 1.8; }
+  .footnote { position: absolute; bottom: 6px; color: #82919e; font-size: 11px; letter-spacing: .3px; }
 </style>
 <div class="canvas">
-  <div class="sidebar">
-    <div class="window"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+  <aside class="sidebar">
     <div class="brand">deepseek <small>HARNESS</small></div>
     <div class="new">⊕ &nbsp;新会话</div>
     <nav class="x_panelList" aria-label="全局面板">
@@ -43,8 +40,14 @@
       <button class="x_panelRow" aria-label="示例面板 B"><span class="x_panelGlyph">✦</span><span class="x_panelTitle">示例面板 B</span></button>
     </nav>
     <div class="workspaces">工作区<div>▱ &nbsp;示例项目 A</div><div>▱ &nbsp;示例项目 B</div></div>
+  </aside>
+  <div class="notes">
+    <div class="eyebrow">DSH · NAV FOLD</div>
+    <h1 id="headline"></h1>
+    <div class="hairline"></div>
+    <p id="details"></p>
+    <div class="footnote">示意画面 · 项目与扩展面板均为虚构数据</div>
   </div>
-  <div class="notes"><div class="eyebrow">DSH NAV FOLD · 0.4.0</div><h1 id="headline"></h1><p id="details"></p><div class="note">匿名示意：画面由虚拟项目和虚拟面板名称生成，不含真实用户会话、路径或账号。</div></div>
 </div>
 <script>window.__ModuleLoader__ = { load: bundle => window.navBundle = bundle };</script>
 <script src="../lib/client.js"></script>
@@ -57,21 +60,21 @@
   if (mode === 'expanded') {
     document.querySelector('.canvas').style.height = '760px';
     nav.querySelector('[data-sidebar-nav-toggle]').click();
-    headline.textContent = '一条线，展开原来的列表';
-    details.textContent = '细线顺着图标布局向下移动；工作区、会话入口保持独立。';
+    headline.textContent = '展开，回到熟悉的列表。';
+    details.textContent = '全局面板有自己的位置。工作区与会话始终留在原处。';
   } else if (mode === 'hover') {
     nav.querySelector('[aria-label="记忆系统"]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
-    headline.textContent = '悬停，名称立刻出现';
-    details.textContent = '箭头原位替换为面板名称，零等待、快速淡入淡出；细线两端轻轻隐去。';
+    headline.textContent = '名称，就在箭头的位置。';
+    details.textContent = '鼠标经过或键盘聚焦，立即知道这个图标是什么。';
   } else if (mode === 'drag') {
-    const row = nav.querySelector('[aria-label="任务看板"]');
-    row.dataset.sidebarDrop = 'before';
-    nav.querySelector('[aria-label="插件"]:not([data-sidebar-nav-toggle])').dataset.sidebarDragging = '';
-    headline.textContent = '拖动排序，松手吸附';
-    details.textContent = '蓝色高光提示落点；悬停图标可查看当前语言的名称；顺序保存在本机。';
+    nav.querySelector('[aria-label="任务看板"]').dataset.sidebarDrop = 'before';
+    nav.querySelector('[aria-label="插件"]').dataset.sidebarDragging = '';
+    headline.textContent = '常用的，放在顺手的位置。';
+    details.textContent = '拖动图标就能排序；高光提示落点，松手即保存。';
   } else {
-    headline.textContent = '侧栏再窄，图标也能换行';
-    details.textContent = '无横向滚动条。图标随宽度等距重排，底部细线两端渐隐、箭头轻轻呼吸。';
+    document.querySelector('.sidebar').style.width = '280px';
+    headline.textContent = '收起导航，留下空间。';
+    details.textContent = '一条细线切换布局。图标等距排列，侧栏变化时自然跟随。';
   }
 </script>
 </html>

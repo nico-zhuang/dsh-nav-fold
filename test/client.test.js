@@ -39,7 +39,7 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   assert.equal(nav.querySelectorAll('button[class*="panelRow"]').length, 2);
   assert.equal(nav.querySelector('button[class*="panelRow"]').getAttribute('aria-label'), 'Plugins');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
-  assert.match(css, /flex-wrap:\s*wrap/);
+  assert.match(css, /data-sidebar-nav-collapsed="true"\][^{]*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*36px\)/, 'wrapped rows must share column origins instead of centering each flex line');
   assert.doesNotMatch(css, /overflow-x:\s*auto/);
   assert.match(css, /panelTitle/);
   assert.match(css, /panelGlyph/);
@@ -57,13 +57,15 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
   assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-bottom:\s*24px/);
-  assert.match(css, /align-content:\s*flex-start/, 'wrapped rows must not stretch while nav height animates');
+  assert.match(css, /align-content:\s*start/, 'wrapped rows must not stretch while nav height animates');
   assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*position:\s*absolute;[^}]*bottom:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;[^}]*height:\s*24px/);
   assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*border:\s*0;[^}]*background:\s*transparent/);
   assert.match(css, /\[data-sidebar-nav-toggle\]::before[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]::after[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*14px;[^}]*height:\s*14px/);
   assert.match(css, /mask-image:\s*linear-gradient/, 'line ends fade instead of cutting off');
+  assert.match(css, /height:\s*0\.5px;[^}]*opacity:\s*\.16/, 'separator should be thinner and more subdued');
+  assert.match(css, /\[data-sidebar-nav-toggle\]:hover::after\s*\{\s*opacity:\s*\.3/, 'hover must not make the divider heavy');
   assert.match(css, /@keyframes\s+sidebarBreathe/, 'arrow breathes in both states');
   assert.match(css, /prefers-reduced-motion:\s*reduce[^}]*animation:\s*none/, 'reduced motion stops breathing');
   assert.equal(nav.lastElementChild, toggle, 'visual bottom toggle should also be last in keyboard focus order');
