@@ -44,7 +44,7 @@
     </nav>
     <div class="workspaces">工作区<div>▱ &nbsp;示例项目 A</div><div>▱ &nbsp;示例项目 B</div></div>
   </div>
-  <div class="notes"><div class="eyebrow">DSH NAV FOLD · 0.3.0</div><h1 id="headline"></h1><p id="details"></p><div class="note">匿名示意：画面由虚拟项目和虚拟面板名称生成，不含真实用户会话、路径或账号。</div></div>
+  <div class="notes"><div class="eyebrow">DSH NAV FOLD · 0.4.0</div><h1 id="headline"></h1><p id="details"></p><div class="note">匿名示意：画面由虚拟项目和虚拟面板名称生成，不含真实用户会话、路径或账号。</div></div>
 </div>
 <script>window.__ModuleLoader__ = { load: bundle => window.navBundle = bundle };</script>
 <script src="../lib/client.js"></script>
@@ -59,6 +59,10 @@
     nav.querySelector('[data-sidebar-nav-toggle]').click();
     headline.textContent = '一条线，展开原来的列表';
     details.textContent = '细线顺着图标布局向下移动；工作区、会话入口保持独立。';
+  } else if (mode === 'hover') {
+    nav.querySelector('[aria-label="记忆系统"]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    headline.textContent = '悬停，名称立刻出现';
+    details.textContent = '箭头原位替换为面板名称，零等待、快速淡入淡出；细线两端轻轻隐去。';
   } else if (mode === 'drag') {
     const row = nav.querySelector('[aria-label="任务看板"]');
     row.dataset.sidebarDrop = 'before';
@@ -67,7 +71,7 @@
     details.textContent = '蓝色高光提示落点；悬停图标可查看当前语言的名称；顺序保存在本机。';
   } else {
     headline.textContent = '侧栏再窄，图标也能换行';
-    details.textContent = '无横向滚动条。底部细线随图标平滑重排而上移，鼠标和键盘都能操作。';
+    details.textContent = '无横向滚动条。图标随宽度等距重排，底部细线两端渐隐、箭头轻轻呼吸。';
   }
 </script>
 </html>

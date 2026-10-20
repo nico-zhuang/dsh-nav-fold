@@ -9,8 +9,9 @@ const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
 const navigation = (name = 'Plugins') => `<nav class="_3WPZCG_panelList" aria-label="Global panels">${panel(name)}${panel('Tasks')}</nav><div id="workspaces">Workspace and sessions</div>`;
 
-function start(html = navigation(), savedState, savedOrder) {
+function start(html = navigation(), savedState, savedOrder, setup) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>${html}</body></html>`, { url: 'http://localhost/' });
+  setup?.(dom.window);
   if (savedState) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse', savedState);
   if (savedOrder) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse:order', savedOrder);
   let bundle;
@@ -62,6 +63,9 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   assert.match(css, /\[data-sidebar-nav-toggle\]::before[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]::after[^}]*\{/);
   assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*14px;[^}]*height:\s*14px/);
+  assert.match(css, /mask-image:\s*linear-gradient/, 'line ends fade instead of cutting off');
+  assert.match(css, /@keyframes\s+sidebarBreathe/, 'arrow breathes in both states');
+  assert.match(css, /prefers-reduced-motion:\s*reduce[^}]*animation:\s*none/, 'reduced motion stops breathing');
   assert.equal(nav.lastElementChild, toggle, 'visual bottom toggle should also be last in keyboard focus order');
   assert.equal(toggle.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
   const closedPath = toggle.querySelector('path')?.getAttribute('d');
@@ -69,6 +73,88 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   assert.equal(nav.querySelectorAll('[data-sidebar-nav-toggle]').length, 1);
   assert.notEqual(toggle.querySelector('path')?.getAttribute('d'), closedPath);
   assert.equal(nav.nextElementSibling.id, 'workspaces');
+  dispose();
+});
+
+test('folded icon spacing stays equal and width changes retarget motion', () => {
+  let observer;
+  let disconnected = false;
+  const played = [];
+  let canceled = 0;
+  let reduced = false;
+  const { doc, dom, dispose } = start(navigation(), undefined, undefined, win => {
+    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe(element) { this.target = element; } unobserve(element) { if (this.target === element) this.target = null; } disconnect() { disconnected = true; } };
+    win.matchMedia = () => ({ matches: reduced });
+    win.Element.prototype.animate = function (frames) { played.push({ element: this, frames }); return { cancel() { canceled++; } }; };
+  });
+  const nav = doc.querySelector('nav');
+  const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+  assert.match(css, /justify-content:\s*space-evenly/);
+  assert.match(css, /column-gap:\s*0/);
+  assert.equal(observer.target, nav);
+  const rows = nav.querySelectorAll('[class*="panelRow"]');
+  let width = 140;
+  nav.getBoundingClientRect = () => ({ width });
+  rows.forEach((row, index) => { row.getBoundingClientRect = () => ({ left: index * (width - 36), top: 0 }); });
+  observer.callback([{ target: nav }]);
+  width = 200;
+  observer.callback([{ target: nav }]);
+  assert.ok(played.some(({ element }) => element === rows[1]), 'resize should animate an icon from previous position');
+  const count = played.length;
+  reduced = true;
+  width = 220;
+  observer.callback([{ target: nav }]);
+  assert.equal(played.length, count);
+  reduced = false;
+  width = 240;
+  observer.callback([{ target: nav }]);
+  const beforeToggle = canceled;
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.ok(canceled > beforeToggle, 'toggle should interrupt pending resize animation');
+  dispose();
+  assert.equal(disconnected, true);
+});
+
+test('a hovered long label grows when the sidebar widens', () => {
+  let observer, width = 120;
+  const { doc, dom, dispose } = start(navigation('A long panel name'), undefined, undefined, win => {
+    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe() {} unobserve() {} disconnect() {} };
+  });
+  const nav = doc.querySelector('nav');
+  const button = nav.querySelector('[data-sidebar-nav-toggle]');
+  Object.defineProperty(button, 'clientWidth', { get: () => width });
+  for (const label of button.querySelectorAll('[data-sidebar-label]')) label.getBoundingClientRect = () => ({ width: 180 });
+  nav.querySelector('[aria-label="A long panel name"]').dispatchEvent(new dom.window.MouseEvent('pointerover', { bubbles: true }));
+  assert.equal(button.querySelector('[data-sidebar-toggle-center]').style.width, '88px');
+  width = 260;
+  observer.callback([{ target: nav }]);
+  assert.equal(button.querySelector('[data-sidebar-toggle-center]').style.width, '196px');
+  dispose();
+});
+
+test('rapid consecutive sidebar resizes continue from previous on-screen icon position', () => {
+  let observer, second, offset = 0, width = 140;
+  const frames = [];
+  const { doc, dispose } = start(navigation(), undefined, undefined, win => {
+    win.ResizeObserver = class { constructor(callback) { this.callback = callback; observer = this; } observe() {} unobserve() {} disconnect() {} };
+    win.Element.prototype.animate = function (keyframes) {
+      if (this === second) frames.push(keyframes);
+      const target = this;
+      return { cancel() { if (target === second) offset = 0; } };
+    };
+  });
+  const nav = doc.querySelector('nav');
+  second = nav.querySelectorAll('[class*="panelRow"]')[1];
+  nav.getBoundingClientRect = () => ({ width });
+  second.getBoundingClientRect = () => ({ left: width - 36 + offset, top: 0 });
+  observer.callback([{ target: nav }]);
+  width = 200;
+  observer.callback([{ target: nav }]);
+  assert.equal(frames.at(-1)[0].transform, 'translate(-60px, 0px)');
+  offset = -20; // mid-flight transform measured after the layout already jumped to the next width
+  width = 220;
+  observer.callback([{ target: nav }]);
+  assert.equal(frames.at(-1)[0].transform, 'translate(-40px, 0px)');
   dispose();
 });
 
@@ -137,21 +223,56 @@ test('host replacing panel rows inside the same nav restores the toggle', async 
   dispose();
 });
 
+test('collapsed icon hover instantly replaces arrow with current label without native tooltip', async () => {
+  const { doc, dom, dispose } = start(`<nav class="_3WPZCG_panelList" aria-label="全局面板">${panel('插件')}${panel('记忆系统')}</nav>`);
+  const nav = doc.querySelector('nav');
+  const [first, second] = nav.querySelectorAll('[class*="panelRow"]');
+  const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
+  for (const label of toggle.querySelectorAll('[data-sidebar-label]')) label.getBoundingClientRect = () => ({ width: 48 });
+  const pointer = (row, type, relatedTarget = null) => row.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, relatedTarget }));
+  assert.equal(first.hasAttribute('title'), false);
+  pointer(first, 'pointerover');
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, '插件');
+  assert.ok(parseFloat(toggle.querySelector('[data-sidebar-toggle-center]').style.width) > 28, 'separator should stretch smoothly around label');
+  pointer(first, 'pointerout', second);
+  pointer(second, 'pointerover', first);
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, '记忆系统');
+  second.setAttribute('aria-label', 'Memory');
+  await flush();
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, 'Memory');
+  nav.insertAdjacentHTML('beforeend', panel('新增面板'));
+  await flush();
+  const future = nav.querySelector('[aria-label="新增面板"]');
+  pointer(future, 'pointerover');
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, '新增面板');
+  pointer(future, 'pointerout');
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]'), null);
+  first.dispatchEvent(new dom.window.FocusEvent('focusin', { bubbles: true }));
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, '插件');
+  pointer(second, 'pointerover');
+  pointer(second, 'pointerout');
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]')?.textContent, '插件', 'pointer leaving should restore focused icon');
+  toggle.click();
+  assert.equal(toggle.querySelector('[data-sidebar-label-active]'), null);
+  dispose();
+  assert.equal(first.hasAttribute('title'), false);
+});
+
 test('collapsed icons show current localized names and restore original titles', async () => {
   const { doc, dispose } = start(`<nav class="_3WPZCG_panelList" aria-label="全局面板">${panel('插件')}${panel('记忆系统').replace('aria-label="记忆系统"', 'aria-label="记忆系统" title="old hint"')}</nav>`);
   const nav = doc.querySelector('nav');
   const rows = [...nav.querySelectorAll('[class*="panelRow"]')];
-  assert.equal(rows[0].title, '插件');
-  assert.equal(rows[1].title, '记忆系统');
+  assert.equal(rows[0].hasAttribute('title'), false);
+  assert.equal(rows[1].hasAttribute('title'), false);
   rows[0].setAttribute('aria-label', 'Plugins');
   await flush();
-  assert.equal(rows[0].title, 'Plugins');
+  assert.equal(rows[0].hasAttribute('title'), false);
   const added = doc.createElement('button');
   added.className = '_3WPZCG_panelRow';
   added.setAttribute('aria-label', '新增面板');
   nav.append(added);
   await flush();
-  assert.equal(added.title, '新增面板');
+  assert.equal(added.hasAttribute('title'), false);
   nav.querySelector('[data-sidebar-nav-toggle]').click();
   assert.equal(rows[0].hasAttribute('title'), false);
   assert.equal(rows[1].title, 'old hint');
@@ -160,7 +281,7 @@ test('collapsed icons show current localized names and restore original titles',
   await flush();
   assert.equal(rows[1].title, 'updated host hint');
   nav.querySelector('[data-sidebar-nav-toggle]').click();
-  assert.equal(rows[1].title, '记忆系统');
+  assert.equal(rows[1].hasAttribute('title'), false);
   nav.querySelector('[data-sidebar-nav-toggle]').click();
   assert.equal(rows[1].title, 'updated host hint');
   dispose();
