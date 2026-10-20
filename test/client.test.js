@@ -9,9 +9,10 @@ const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
 const navigation = (name = 'Plugins') => `<nav class="_3WPZCG_panelList" aria-label="Global panels">${panel(name)}${panel('Tasks')}</nav><div id="workspaces">Workspace and sessions</div>`;
 
-function start(html = navigation(), savedState) {
+function start(html = navigation(), savedState, savedOrder) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedState) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse', savedState);
+  if (savedOrder) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse:order', savedOrder);
   let bundle;
   const code = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
   assert.match(code, /window\.__ModuleLoader__\.load/, 'client bundle must exist');
@@ -54,9 +55,12 @@ test('both states share a full-width slim top bar with a legible SVG icon', () =
   const nav = doc.querySelector('nav');
   const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
   const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
-  assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-top:\s*28px/);
+  assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*position:\s*relative;[^}]*padding-top:\s*24px/);
   assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*position:\s*absolute;[^}]*top:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;[^}]*height:\s*24px/);
-  assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*20px;[^}]*height:\s*20px/);
+  assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*border:\s*0;[^}]*background:\s*transparent/);
+  assert.match(css, /\[data-sidebar-nav-toggle\]::before[^}]*\{/);
+  assert.match(css, /\[data-sidebar-nav-toggle\]::after[^}]*\{/);
+  assert.match(css, /\[data-sidebar-nav-toggle\]\s+svg[^{]*\{[^}]*width:\s*14px;[^}]*height:\s*14px/);
   assert.equal(toggle.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
   const closedPath = toggle.querySelector('path')?.getAttribute('d');
   toggle.click();
@@ -84,6 +88,114 @@ test('persistent choice, future panel entries and sidebar remount keep same stat
   const again = start(navigation(), dom.window.localStorage.getItem('dsh-sidebar-nav-collapse'));
   assert.equal(again.doc.querySelector('nav').dataset.sidebarNavCollapsed, 'false');
   again.dispose();
+});
+
+test('host replacing panel rows inside the same nav restores the toggle', async () => {
+  const { doc, dispose } = start();
+  const nav = doc.querySelector('nav');
+  nav.replaceChildren(...[...nav.querySelectorAll('[class*="panelRow"]')].map(row => row.cloneNode(true)));
+  await flush();
+  assert.equal(nav.querySelectorAll('[data-sidebar-nav-toggle]').length, 1);
+  assert.equal(nav.querySelector('[data-sidebar-nav-toggle]').getAttribute('aria-expanded'), 'false');
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
+  dispose();
+});
+
+test('collapsed icons show current localized names and restore original titles', async () => {
+  const { doc, dispose } = start(`<nav class="_3WPZCG_panelList" aria-label="全局面板">${panel('插件')}${panel('记忆系统').replace('aria-label="记忆系统"', 'aria-label="记忆系统" title="old hint"')}</nav>`);
+  const nav = doc.querySelector('nav');
+  const rows = [...nav.querySelectorAll('[class*="panelRow"]')];
+  assert.equal(rows[0].title, '插件');
+  assert.equal(rows[1].title, '记忆系统');
+  rows[0].setAttribute('aria-label', 'Plugins');
+  await flush();
+  assert.equal(rows[0].title, 'Plugins');
+  const added = doc.createElement('button');
+  added.className = '_3WPZCG_panelRow';
+  added.setAttribute('aria-label', '新增面板');
+  nav.append(added);
+  await flush();
+  assert.equal(added.title, '新增面板');
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.equal(rows[0].hasAttribute('title'), false);
+  assert.equal(rows[1].title, 'old hint');
+  rows[1].title = 'updated host hint';
+  nav.append(doc.createElement('span'));
+  await flush();
+  assert.equal(rows[1].title, 'updated host hint');
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.equal(rows[1].title, '记忆系统');
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.equal(rows[1].title, 'updated host hint');
+  dispose();
+  assert.equal(added.hasAttribute('title'), false);
+});
+
+test('native drag shows a snap placeholder, persists order, and survives remount', async () => {
+  const { doc, dom, dispose } = start();
+  const nav = doc.querySelector('nav');
+  const [first, second] = nav.querySelectorAll('[class*="panelRow"]');
+  assert.equal(first.draggable, true);
+  assert.equal(second.draggable, true);
+  const transfer = { setData() {}, effectAllowed: '', dropEffect: '' };
+  const event = (target, name, y = 0) => {
+    const e = new dom.window.Event(name, { bubbles: true, cancelable: true });
+    Object.defineProperties(e, { dataTransfer: { value: transfer }, clientY: { value: y }, clientX: { value: 2 } });
+    target.dispatchEvent(e);
+    return e;
+  };
+  first.getBoundingClientRect = () => ({ top: 0, bottom: 36, left: 0, right: 36, width: 36, height: 36 });
+  event(second, 'dragstart');
+  assert.equal(transfer.effectAllowed, 'move');
+  assert.equal(event(first, 'dragover', 4).defaultPrevented, true);
+  assert.equal(first.dataset.sidebarDrop, 'before');
+  assert.equal(event(first, 'drop', 4).defaultPrevented, true);
+  assert.equal(first.style.order, '2');
+  assert.equal(second.style.order, '1');
+  assert.equal(second.hasAttribute('data-sidebar-drop'), false);
+  const saved = dom.window.localStorage.getItem('dsh-sidebar-nav-collapse:order');
+  assert.deepEqual(JSON.parse(saved), ['Tasks', 'Plugins']);
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  assert.equal(second.style.order, '1');
+  const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+  assert.match(css, /data-sidebar-drop="before"/);
+  assert.match(css, /box-shadow/);
+  assert.match(css, /prefers-reduced-motion/);
+  dispose();
+  assert.equal(first.draggable, false);
+  assert.equal(first.style.order, '');
+  const again = start(navigation(), undefined, saved);
+  const [a, b] = again.doc.querySelectorAll('[class*="panelRow"]');
+  assert.equal(a.style.order, '2');
+  assert.equal(b.style.order, '1');
+  again.dispose();
+});
+
+test('keyboard reorder, future entries, and canceled drag cleanly update order', async () => {
+  const { doc, dom, dispose } = start();
+  const nav = doc.querySelector('nav');
+  const [first, second] = nav.querySelectorAll('[class*="panelRow"]');
+  const key = new dom.window.KeyboardEvent('keydown', { bubbles: true, cancelable: true, altKey: true, key: 'ArrowRight' });
+  first.dispatchEvent(key);
+  assert.equal(key.defaultPrevented, true);
+  assert.equal(first.style.order, '2');
+  assert.equal(second.style.order, '1');
+  nav.insertAdjacentHTML('beforeend', panel('New panel'));
+  await flush();
+  const added = nav.querySelector('[aria-label="New panel"]');
+  assert.equal(added.draggable, true);
+  assert.equal(added.style.order, '3');
+  nav.querySelector('[data-sidebar-nav-toggle]').click();
+  first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { bubbles: true, cancelable: true, altKey: true, key: 'ArrowUp' }));
+  assert.equal(first.style.order, '1');
+  assert.equal(second.style.order, '2');
+  const e = new dom.window.Event('dragstart', { bubbles: true, cancelable: true });
+  Object.defineProperty(e, 'dataTransfer', { value: { setData() {}, effectAllowed: '' } });
+  second.dispatchEvent(e);
+  second.dispatchEvent(new dom.window.Event('dragend', { bubbles: true }));
+  assert.equal(nav.querySelector('[data-sidebar-dragging]'), null);
+  dispose();
 });
 
 test('host disable removes button, style, nav state and observer', async () => {
