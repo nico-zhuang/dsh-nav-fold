@@ -3,15 +3,60 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
-import { JSDOM } from '../../turn-file-actions-plugin/node_modules/jsdom/lib/api.js';
+import { JSDOM } from 'jsdom';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
+
+test('v0.4.3 bundle requests sidebar, session and workspace client modules', () => {
+  const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+  assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
+  assert.equal(manifest.version, '0.4.3', 'public release must differ from the previous v0.4.2 tag');
+  assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
+});
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
 const navigation = (name = 'Plugins') => `<nav class="_3WPZCG_panelList" aria-label="Global panels">${panel(name)}${panel('Tasks')}</nav><div id="workspaces">Workspace and sessions</div>`;
+const workspaceSidebar = () => `<div class="kB3qhq_root">${navigation().replace('<div id="workspaces">Workspace and sessions</div>', '<div class="kB3qhq_regionArea" id="workspaces">Workspace and sessions</div>')}<div class="kB3qhq_footArea"></div></div>`;
+
+function settingsForm(initial = false) {
+  let snapshot = { status: 'ready', writable: true, revision: 0, value: { workspaceViewsEnabled: initial } };
+  const listeners = new Set();
+  return {
+    getSnapshot: () => snapshot,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    accept(value) { snapshot = { ...snapshot, revision: snapshot.revision + 1, value: { workspaceViewsEnabled: value } }; for (const listener of listeners) listener(); },
+    async set(key, value) { assert.equal(key, 'workspaceViewsEnabled'); this.accept(value); return true; },
+  };
+}
+
+function slotFixture() {
+  const entries = new Map();
+  const listeners = new Map();
+  const native = { options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: {
+    'sidebar.workspaces.session.menu.item': {}, 'sidebar.workspaces.session.row.action': {},
+  } };
+  let nativeEntries = [native];
+  const notify = (name) => { for (const listener of listeners.get(name) || []) queueMicrotask(listener); };
+  const slots = {
+    inject: (_name, fn) => fn(),
+    register(spec, component) {
+      assert.ok(['sidebar.workspaces', 'plugins.bundle.config'].includes(spec.name));
+      entries.set(spec.name, { spec, component }); notify(spec.name);
+      return () => { if (entries.get(spec.name)?.component === component) { entries.delete(spec.name); notify(spec.name); } };
+    },
+    entries(name) { return name === 'sidebar.workspaces' ? [...nativeEntries, ...(entries.has(name) ? [{ options: entries.get(name).spec, registrant: entries.get(name).spec.registrant }] : [])] : []; },
+    entriesOfSlot(name) { return this.entries(name).sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0)); },
+    spec(name) { return name === 'sidebar.workspaces' ? { kind: 'single', scope: 'root' } : undefined; },
+    subscribe(name, listener) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(listener); return () => listeners.get(name).delete(listener); },
+  };
+  return { entries, slots, replaceNative(value) { nativeEntries = value; notify('sidebar.workspaces'); } };
+}
+const configForms = (form) => ({ get: (id) => id === 'nav-fold' ? form : undefined });
 
 function start(html = navigation(), savedState, savedOrder, setup) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>${html}</body></html>`, { url: 'http://localhost/' });
-  setup?.(dom.window);
+  const services = setup?.(dom.window) || {};
   if (savedState) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse', savedState);
   if (savedOrder) dom.window.localStorage.setItem('dsh-sidebar-nav-collapse:order', savedOrder);
   let bundle;
@@ -19,12 +64,236 @@ function start(html = navigation(), savedState, savedOrder, setup) {
   assert.match(code, /window\.__ModuleLoader__\.load/, 'client bundle must exist');
   vm.runInNewContext(code, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver });
   assert.equal(bundle.id, 'dsh-nav-fold');
-  const client = bundle.factory(() => { throw Error('unexpected dependency'); });
+  const client = bundle.factory((id) => { if (id === 'react') return React; if (id === '@deepseek-ai/dsh-client-ui-primitives') return { StateDot: ({ state }) => React.createElement('span', { 'data-host-state-dot': state }) }; throw Error(`unexpected dependency: ${id}`); });
   const disposers = [];
-  client.apply({ effect: (fn) => { disposers.push(fn()); } });
-  return { dom, dispose: () => { for (const fn of disposers.reverse()) fn(); }, doc: dom.window.document };
+  client.apply({ effect: (fn) => { disposers.push(fn()); }, ...services });
+  return { dom, client, dispose: () => { for (const fn of disposers.reverse()) fn(); }, doc: dom.window.document };
 }
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
+
+test('old localStorage opt-in is ignored; accepted setting mounts after DSH creates sidebar', async () => {
+  const { slots, entries } = slotFixture();
+  const form = settingsForm();
+  const { doc, dom, dispose } = start('<div id="loading"></div>', undefined, undefined, (win) => {
+    win.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
+    return { slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) };
+  });
+  try {
+    doc.body.innerHTML = workspaceSidebar();
+    await flush();
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'obsolete localStorage setting cannot enable views');
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null, 'workspace quick toggle was removed');
+    assert.ok(entries.has('plugins.bundle.config'), 'settings page is registered in the official plugin config slot');
+    assert.match(renderToStaticMarkup(React.createElement(entries.get('plugins.bundle.config').component, { view: 'page' })), /Workspace views/);
+    form.accept(true);
+    await flush();
+    assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'accepted form opt-in appears when host sidebar mounts later');
+    assert.equal(dom.window.localStorage.getItem('dsh-nav-fold:workspace-tabs'), 'on', 'obsolete setting is not rewritten');
+  } finally { dispose(); }
+});
+
+test('host changing region class while Activity is open restores native slot', async () => {
+  const { slots, entries } = slotFixture();
+  const form = settingsForm(true);
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  try {
+    assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'));
+    doc.querySelector('[data-view="activity"]').click();
+    doc.querySelector('#workspaces').className = 'different_host_region';
+    await flush();
+    assert.equal(entries.has('sidebar.workspaces'), false);
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally { dispose(); }
+});
+
+test('English host tabs have accessible localized names and decorative SVG icons', () => {
+  const { slots } = slotFixture();
+  const form = settingsForm(true);
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, (win) => { win.document.documentElement.lang = 'en'; return { slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }; });
+  try {
+    const buttons = [...doc.querySelectorAll('[data-dsh-workspace-tabs] button')];
+    assert.deepEqual(buttons.map(button => button.getAttribute('aria-label')), ['工作区 / Workspaces', '活动 / Activity', '收藏 / Favorites']);
+    assert.deepEqual(buttons.map(button => button.title), ['Workspaces', 'Activity', 'Favorites']);
+    assert.ok(buttons.every(button => button.querySelector('svg[aria-hidden="true"] path') && button.textContent === ''), 'icon-only tabs preserve accessible labels');
+  } finally { dispose(); }
+});
+
+test('invalid rc5 sidebar structure removes alternate slot instead of hiding native tree', async () => {
+  const { slots, entries } = slotFixture();
+  const form = settingsForm(true);
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  try {
+    assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'));
+    doc.querySelector('[data-view="activity"]').click();
+    assert.equal(entries.has('sidebar.workspaces'), true);
+    const extra = doc.createElement('div');
+    extra.className = 'kB3qhq_regionArea';
+    doc.querySelector('.kB3qhq_root').append(extra);
+    await flush();
+    assert.equal(entries.has('sidebar.workspaces'), false, 'a changed host shape restores the native singleton');
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally { dispose(); }
+});
+
+test('workspace views require a verified native occupant, root singleton, and winning override', () => {
+  const invalid = [
+    ['missing native child markers', fixture => fixture.replaceNative([{ options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: {} }])],
+    ['foreign occupant', fixture => fixture.replaceNative([{ options: { name: 'sidebar.workspaces' }, registrant: 'other-plugin', locale: 'other', children: {} }])],
+    ['multiple native occupants', fixture => fixture.replaceNative([...fixture.slots.entries('sidebar.workspaces'), ...fixture.slots.entries('sidebar.workspaces')])],
+    ['non-root slot', fixture => { fixture.slots.spec = () => ({ kind: 'single', scope: 'workspace' }); }],
+    ['non-single slot', fixture => { fixture.slots.spec = () => ({ kind: 'multi', scope: 'root' }); }],
+    ['override loses winner', fixture => { fixture.slots.entriesOfSlot = name => fixture.slots.entries(name); }],
+  ];
+  for (const [description, invalidate] of invalid) {
+    const fixture = slotFixture(); invalidate(fixture);
+    const form = settingsForm(true);
+    const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+    try {
+      if (description === 'override loses winner') doc.querySelector('[data-view="activity"]').click();
+      assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, description);
+      assert.equal(fixture.entries.has('sidebar.workspaces'), false, description);
+      assert.ok(fixture.entries.has('plugins.bundle.config'), 'config registration stays independent from workspace override');
+      assert.equal(doc.querySelector('#workspaces')?.textContent, 'Workspace and sessions');
+    } finally { dispose(); }
+  }
+});
+
+test('accepted three views keep native workspace slot until alternate selected and saved disable', async () => {
+  const { slots, entries } = slotFixture();
+  const form = settingsForm();
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  try {
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    assert.equal(entries.has('sidebar.workspaces'), false);
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null);
+    form.accept(true);
+    const tabs = doc.querySelector('[data-dsh-workspace-tabs]');
+    assert.ok(tabs, 'a switch appears immediately above native workspace region');
+    const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+    assert.match(css, /\[data-dsh-workspace-tabs\]::before[^}]*transition:\s*transform/, 'selected thumb slides rather than replacing a rigid highlight');
+    assert.match(css, /prefers-reduced-motion: reduce[^}]*data-dsh-workspace-tabs[^}]*transition:\s*none/s, 'reduced motion removes tab travel');
+    assert.match(css, /kB3qhq_root\.kB3qhq_collapsed[^}]*data-dsh-workspace-tabs-row[^}]*display:\s*none/, 'native rail hides the owned tabs row rather than squeezing the three-tab switch');
+    assert.equal(tabs.parentElement.nextElementSibling.id, 'workspaces');
+    assert.equal(tabs.nextElementSibling?.dataset.dshWorkspaceTabsToggle, '', 'outer-right fold button remains outside the three equal tab cells');
+    assert.deepEqual([...tabs.querySelectorAll('button')].map(button => button.dataset.view), ['workspace', 'activity', 'favorites']);
+    assert.equal(tabs.children.length, 3, 'no decorative child may push the third grid tab onto a second row');
+    assert.equal(entries.has('sidebar.workspaces'), false, 'Workspaces remains native');
+    tabs.querySelector('[data-view="activity"]').click();
+    assert.equal(entries.get('sidebar.workspaces')?.spec.priority, -100);
+    tabs.querySelector('[data-view="favorites"]').click();
+    assert.equal(entries.get('sidebar.workspaces')?.spec.priority, -100);
+    tabs.querySelector('[data-view="workspace"]').click();
+    assert.equal(entries.has('sidebar.workspaces'), false);
+    form.accept(false);
+    await flush();
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    assert.equal(entries.has('sidebar.workspaces'), false);
+  } finally { dispose(); }
+});
+
+test('alternate workspace occupant renders real session rows and native pinned favorites', () => {
+  const { slots, entries } = slotFixture();
+  const form = settingsForm(true);
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: { openSession: () => {} }, configForms: configForms(form) }));
+  const list = { phase: 'ready', ids: ['a', 'b'], byId: { a: { id: 'a', title: 'Draft proposal', updatedAt: 42, running: true }, b: { id: 'b', title: 'Reference notes', updatedAt: 40 } } };
+  const data = { useSessions: () => list, useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [{ title: 'Sample Space', sessionIds: ['a','b'] }], pinnedSessionIds: ['b'], archivedSessionIds: [] }), wide: true };
+  try {
+    doc.querySelector('[data-view="activity"]').click();
+    const activity = renderToStaticMarkup(React.createElement(entries.get('sidebar.workspaces').component, data));
+    assert.match(activity, /Draft proposal/);
+    assert.match(activity, /Reference notes/);
+    assert.match(activity, /Sample Space/);
+    assert.match(activity, /运行中|Running/);
+    assert.match(activity, /aria-label="Draft proposal · Sample Space · 运行中"/, 'screen-reader button name must announce its status');
+    assert.match(activity, /data-host-state-dot="ongoing"/, 'running state uses the official host StateDot primitive');
+    const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+    assert.match(css, /\[data-dsh-workspace-view\]/);
+    assert.match(css, /\.dsh-nav-fold-session:focus-visible/);
+    assert.match(css, /\.dsh-nav-fold-session-subtitle\s*\{[^}]*color:\s*color-mix\(/, 'subtitle must adapt to both theme foregrounds rather than #888 on white');
+    assert.match(css, /\.dsh-nav-fold-empty\s*\{[^}]*color:\s*color-mix\(/);
+    assert.match(css, /\[data-dsh-workspace-view\][^}]*animation:\s*dshWorkspaceEnter/, 'alternate content should ease in without animating native tree');
+    assert.match(css, /prefers-reduced-motion: reduce[^}]*\[data-dsh-workspace-view\][^}]*animation:\s*none/s);
+    doc.querySelector('[data-view="favorites"]').click();
+    const favorites = renderToStaticMarkup(React.createElement(entries.get('sidebar.workspaces').component, data));
+    assert.match(favorites, /Reference notes/);
+    assert.doesNotMatch(favorites, /Draft proposal/);
+    const pending = renderToStaticMarkup(React.createElement(entries.get('sidebar.workspaces').component, { ...data, useSessions: () => ({ phase: 'pending', ids: [], byId: {} }) }));
+    assert.match(pending, /正在加载会话|Loading/);
+    assert.doesNotMatch(pending, /暂无收藏会话|No pinned sessions/, 'loading should not look like confirmed emptiness');
+  } finally { dispose(); }
+});
+
+test('Activity inherits running subagent status from rc5 projection catalog', () => {
+  const { client, dispose } = start();
+  const list = { phase: 'ready', ids: ['parent', 'recent'], byId: { parent: { id: 'parent', title: 'Delegated work', running: false, updatedAt: 1 }, recent: { id: 'recent', title: 'Just opened', running: false, updatedAt: 99 } }, projectionsBySession: { parent: { values: { subagentCatalog: [{ id: 'child-not-in-byId' }] } } } };
+  const statuses = new Map([['child-not-in-byId', { running: true }]]);
+  const result = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set());
+  assert.equal(result.activity[0].id, 'parent');
+  assert.equal(result.activity[0].kind, 'running');
+  dispose();
+});
+
+test('Activity caps only recent rows while Favorites retains native pins beyond that cap', () => {
+  const { client, dispose } = start();
+  const ids = Array.from({ length: 24 }, (_, index) => `s${index}`);
+  const byId = Object.fromEntries(ids.map((id, index) => [id, { id, title: id, updatedAt: 24 - index, running: id === 's23' }]));
+  const list = { ids, byId, phase: 'ready' };
+  const views = client.__test__.selectWorkspaceViews(list, new Map(), { pinnedSessionIds: ['s22'] }, new Set());
+  assert.equal(views.activity.length, 21, '20 recent plus the active session are visible');
+  assert.ok(views.activity.some(row => row.id === 's23' && row.kind === 'running'));
+  assert.deepEqual(Array.from(views.favorites, row => row.id), ['s22']);
+  dispose();
+});
+
+test('Activity uses host completionUnread without inventing unread for idle sessions', () => {
+  const { client, dispose } = start();
+  const list = { ids: ['done', 'idle'], byId: { done: { id: 'done', title: 'Done', running: false }, idle: { id: 'idle', title: 'Idle', completionUnread: true, running: false } } };
+  const statuses = new Map([['done', { running: false, completionUnread: true }], ['idle', { running: false, completionUnread: false }]]);
+  const result = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set());
+  assert.equal(result.activity.find(row => row.id === 'done').kind, 'unread');
+  assert.equal(result.activity.find(row => row.id === 'idle').kind, 'recent');
+  dispose();
+});
+
+test('workspace activity keeps real states while favorites follows native pins', () => {
+  const { client, dispose } = start();
+  const ids = ['waiting', 'running', 'unread', 'recent', 'favorite', 'archived', 'blank', 'child'];
+  const byId = Object.fromEntries(ids.map((id, index) => [id, { id, title: id, updatedAt: id === 'recent' ? 999 : ids.length - index, running: id === 'running', origin: id === 'child' ? 'subagent' : 'user', blank: id === 'blank' }]));
+  const list = { ids, byId, phase: 'ready' };
+  const statuses = new Map([['waiting', { pendingInteraction: { kind: 'approval' }, running: true }], ['running', { running: true }], ['recent', { pendingInteraction: { kind: 'tool' }, running: false }]]);
+  const workspaces = { items: [{ path: '/tmp/Project', sessionIds: ids }], pinnedSessionIds: ['favorite'], archivedSessionIds: ['archived'] };
+  const result = client.__test__.selectWorkspaceViews(list, statuses, workspaces, new Set(['unread']));
+  assert.deepEqual(Array.from(result.activity, row => row.id), ['waiting', 'running', 'unread', 'recent', 'favorite']);
+  assert.deepEqual(Array.from(result.activity.slice(0, 3), row => row.kind), ['waiting', 'running', 'unread']);
+  assert.equal(result.activity.find(row => row.id === 'recent').kind, 'recent', 'non-visible host pending kinds are not waiting');
+  assert.deepEqual(Array.from(result.favorites, row => row.id), ['favorite']);
+  assert.equal(result.activity[0].workspace, 'Project');
+  dispose();
+});
+
+test('accepted workspace views are independent of global folding and have no quick toggle', () => {
+  const { slots } = slotFixture();
+  const form = settingsForm();
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  const nav = doc.querySelector('nav');
+  const fold = nav.querySelector('[data-sidebar-nav-toggle]');
+  assert.equal(doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null);
+  assert.equal(dom.window.localStorage.getItem('dsh-nav-fold:workspace-tabs'), null);
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'true');
+  form.accept(true);
+  assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'));
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'true', 'workspace setting never changes fold state');
+  fold.click();
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
+  assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'fold state does not disable workspace views');
+  form.accept(false);
+  assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  assert.equal(nav.dataset.sidebarNavCollapsed, 'false', 'disabling views never changes fold state');
+  assert.equal(dom.window.localStorage.getItem('dsh-nav-fold:workspace-tabs'), null);
+  assert.equal(nav.nextElementSibling?.id, 'workspaces', 'workspace region remains in the native root');
+  assert.equal(doc.querySelector('#workspaces')?.textContent, 'Workspace and sessions');
+  dispose();
+});
 
 test('collapse is a keyboard-accessible icon strip scoped to global nav; workspace remains intact', () => {
   const { doc, dom, dispose } = start();
