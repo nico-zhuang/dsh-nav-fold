@@ -42,7 +42,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     removePeer() { const index = entries.findIndex(entry => entry.registrant === 'another-sidebar'); if (index >= 0) { entries.splice(index, 1); notify(); } },
   };
   let bundle;
-  vm.runInNewContext(source, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver });
+  vm.runInNewContext(source, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver, Error });
   const client = bundle.factory((id) => id === 'react' ? React : id === '@deepseek-ai/dsh-client-ui-primitives'
     ? {
       StateDot: ({ state }) => React.createElement('i', { 'data-dsh-state-dot': state }),
@@ -52,6 +52,11 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
       IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+      IconArchiveOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+      Button: ({ children, ...props }) => React.createElement('button', { type: 'button', ...props }, children),
+      Modal: ({ open, title, description, footer, onClose, children }) => open && React.createElement('div', { role: 'dialog', 'aria-label': title },
+        React.createElement('p', null, description), children, footer,
+        React.createElement('button', { type: 'button', 'aria-label': 'Close dialog', onClick: onClose }, '×')),
     }
     : (() => { throw Error(`unexpected dependency ${id}`); })());
   const disposers = [];
@@ -476,13 +481,13 @@ test('ellipsis menu opens safe session actions without activating the main row',
     assert.equal(dots.getAttribute('aria-haspopup'), 'menu');
     await React.act(async () => { dots.click(); });
     let items = [...host.querySelectorAll('[role="menuitem"]')];
-    assert.equal(items.length, 3, 'Open, Pin and Copy ID are the safe menu actions');
+    assert.equal(items.length, 4, 'Open, Pin, Archive and Copy ID are independent actions');
     assert.deepEqual(calls, [], 'opening menu does not open the conversation');
-    await React.act(async () => { items[2].click(); await flush(); });
+    await React.act(async () => { items.find(item => /复制会话 ID/.test(item.textContent)).click(); await flush(); });
     assert.deepEqual(calls, [['copy', 'a']]);
     await React.act(async () => { dots.click(); });
     items = [...host.querySelectorAll('[role="menuitem"]')];
-    await React.act(async () => { items[1].click(); await flush(); });
+    await React.act(async () => { items.find(item => /收藏会话/.test(item.textContent)).click(); await flush(); });
     assert.deepEqual(calls, [['copy', 'a'], ['pin', 'a']]);
     await React.act(async () => { row.dispatchEvent(new app.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
     assert.ok(host.querySelector('[role="menu"]'), 'right-click uses the same controlled menu');
@@ -531,7 +536,7 @@ test('failed unpin leaves the favorite pressed and offers retry', async () => {
 });
 
 test('session actions reserve title space and reveal on hover, focus or touch', () => {
-  assert.match(source, /\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*56px/);
+  assert.match(source, /\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*82px/);
   assert.match(source, /\.dsh-nav-fold-session:hover\s+\.dsh-nav-fold-session-actions,\s*\.dsh-nav-fold-session:focus-within\s+\.dsh-nav-fold-session-actions/);
   assert.match(source, /@media\s*\(hover:\s*none\)\s*\{\s*\.dsh-nav-fold-session-actions\s*\{[^}]*opacity:\s*1/);
   assert.match(source, /\.dsh-nav-fold-session-actions\s+button:focus-visible\s*\{[^}]*outline:/);
@@ -539,4 +544,153 @@ test('session actions reserve title space and reveal on hover, focus or touch', 
 
 test('reduced motion disables the action strip fade', () => {
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*\.dsh-nav-fold-session-actions\s*\{[^}]*transition:\s*none/.test(source), 'action fade must stop when reduced motion is requested');
+});
+
+async function withArchiveView(uiWorkspace, check, { favorites = false } = {}) {
+  const app = mount({ active: true, uiWorkspace });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector(`[data-view="${favorites ? 'favorites' : 'activity'}"]`).click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const sessions = { ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } };
+    let archived = [];
+    const props = { useSessions: () => sessions, useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: favorites ? ['a'] : [], archivedSessionIds: archived }) };
+    const render = async () => React.act(async () => { root ||= createRoot(host); root.render(React.createElement(View, props)); });
+    await render();
+    await check({ app, host, render, archiveSnapshot: async () => { archived = ['a']; await render(); } });
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+}
+
+const activeArchiveError = () => Object.assign(new Error('session busy'), { name: 'WorkspaceArchiveError', rpcError: { code: 'workspace/session-active' } });
+
+for (const favorites of [false, true]) test(`archive button and menu share native API without navigation in ${favorites ? 'Favorites' : 'Activity'} until host snapshot`, async () => {
+  const calls = [];
+  await withArchiveView({ openSession: id => calls.push(['open', id]), archiveSession: async (...args) => { calls.push(['archive', ...args]); } }, async ({ host, archiveSnapshot }) => {
+    const row = host.querySelector('.dsh-nav-fold-session');
+    const open = row.querySelector('.dsh-nav-fold-session-main');
+    const actions = row.querySelector('.dsh-nav-fold-session-actions');
+    assert.deepEqual([...actions.children].map(child => child.matches('[data-session-menu], [data-session-archive], [data-session-pin]') ? child.getAttributeNames().find(name => name.startsWith('data-session-')) : child.querySelector('button')?.getAttributeNames().find(name => name.startsWith('data-session-'))), ['data-session-menu', 'data-session-archive', 'data-session-pin']);
+    assert.ok([...actions.querySelectorAll('button')].every(button => !open.contains(button)), 'all action buttons are siblings of the main button');
+    const archive = actions.querySelector('[data-session-archive]');
+    assert.ok(archive, 'standalone archive button exists');
+    await React.act(async () => { archive.click(); await flush(); });
+    assert.deepEqual(calls, [['archive', 'a']]);
+    assert.ok(host.querySelector('.dsh-nav-fold-session'), 'no optimistic removal');
+    await React.act(async () => { actions.querySelector('[data-session-menu]').click(); });
+    const menuArchive = [...host.querySelectorAll('[role="menuitem"]')].find(item => /归档会话/.test(item.textContent));
+    assert.ok(menuArchive);
+    await React.act(async () => { menuArchive.click(); await flush(); });
+    assert.deepEqual(calls, [['archive', 'a'], ['archive', 'a']]);
+    assert.equal(host.querySelector('[role="menu"]'), null);
+    assert.ok(host.querySelector('.dsh-nav-fold-session'));
+    await archiveSnapshot();
+    assert.equal(host.querySelector('.dsh-nav-fold-session'), null, 'host archived IDs remove the row');
+  }, { favorites });
+});
+
+test('known active archive refusal requires explicit confirmation and Cancel never stops work', async () => {
+  const calls = [];
+  await withArchiveView({ archiveSession: async (...args) => { calls.push(args); throw activeArchiveError(); } }, async ({ host }) => {
+    await React.act(async () => { host.querySelector('[data-session-archive]').click(); await flush(); });
+    assert.deepEqual(calls, [['a']]);
+    const dialog = host.querySelector('[role="dialog"]');
+    assert.ok(dialog, 'only known active refusal displays confirmation');
+    assert.match(dialog.textContent, /停止.*运行|stop.*running/i);
+    const cancel = [...dialog.querySelectorAll('button')].find(button => /取消|Cancel/.test(button.textContent));
+    await React.act(async () => { cancel.click(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.deepEqual(calls, [['a']], 'Cancel never sends stopActivity');
+  });
+});
+
+test('explicit archive confirmation stops once, guards pending submissions and preserves dialog for retry', async () => {
+  const calls = [];
+  let reject, resolve;
+  await withArchiveView({ archiveSession: (...args) => {
+    calls.push(args);
+    if (calls.length === 1) return Promise.reject(activeArchiveError());
+    return new Promise((yes, no) => { resolve = yes; reject = no; });
+  } }, async ({ host, archiveSnapshot }) => {
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => /归档会话/.test(item.textContent)).click(); await flush(); });
+    assert.equal(host.querySelector('[role="menu"]'), null);
+    const confirm = () => [...host.querySelector('[role="dialog"]').querySelectorAll('button')].find(button => /归档并停止|Stop and archive/.test(button.textContent));
+    assert.ok(confirm());
+    await React.act(async () => { confirm().click(); });
+    assert.equal(confirm().disabled, true);
+    assert.equal(host.querySelector('[data-session-archive]').disabled, true);
+    await React.act(async () => { confirm().click(); host.querySelector('[data-session-archive]').click(); host.querySelector('[aria-label="Close dialog"]').click(); });
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['a'], ['a', { stopActivity: true }]], 'in-flight guard and close do not resubmit');
+    assert.ok(host.querySelector('[role="dialog"]'));
+    await React.act(async () => { reject(Error('temporary stop failure')); await flush(); });
+    assert.ok(host.querySelector('[role="dialog"]'), 'failed confirmation remains retryable');
+    assert.match(host.querySelector('[role="dialog"] [role="alert"]').textContent, /重试|retry/i);
+    await React.act(async () => { confirm().click(); });
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['a'], ['a', { stopActivity: true }], ['a', { stopActivity: true }]]);
+    await React.act(async () => { resolve(); await flush(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.ok(host.querySelector('.dsh-nav-fold-session'), 'successful promise still waits for authoritative host snapshot');
+    await archiveSnapshot();
+    assert.equal(host.querySelector('.dsh-nav-fold-session'), null);
+  });
+});
+
+test('generic archive failure is non-destructive and can retry without forced stop', async () => {
+  const calls = [];
+  await withArchiveView({ archiveSession: async (...args) => { calls.push(args); throw Error('network'); } }, async ({ host }) => {
+    await React.act(async () => { host.querySelector('[data-session-archive]').click(); await flush(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.match(host.querySelector('[role="alert"]').textContent, /重试|retry/i);
+    assert.ok(host.querySelector('.dsh-nav-fold-session'));
+    await React.act(async () => { host.querySelector('[data-session-archive]').click(); await flush(); });
+    assert.deepEqual(calls, [['a'], ['a']], 'generic errors never trigger forced stop');
+  }, { favorites: true });
+});
+
+test('missing archive API fails closed without a stop attempt or navigation', async () => {
+  const calls = [];
+  await withArchiveView({ openSession: id => calls.push(id) }, async ({ host }) => {
+    const button = host.querySelector('[data-session-archive]');
+    assert.equal(button.disabled, true);
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => /归档会话/.test(item.textContent)).click(); });
+    assert.deepEqual(calls, []);
+    assert.match(host.querySelector('[role="alert"]').textContent, /不可用|unavailable/i);
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+  });
+});
+
+test('ordinary archive request blocks concurrent Pin and duplicate menu submissions', async () => {
+  const calls = [];
+  let resolve;
+  await withArchiveView({ archiveSession: id => { calls.push(['archive', id]); return new Promise(yes => { resolve = yes; }); },
+    unpinSession: async id => { calls.push(['unpin', id]); } }, async ({ host }) => {
+    await React.act(async () => { host.querySelector('[data-session-archive]').click(); });
+    assert.equal(host.querySelector('[data-session-pin]').disabled, true);
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => {
+      [...host.querySelectorAll('[role="menuitem"]')].find(item => /归档会话/.test(item.textContent)).click();
+      host.querySelector('[data-session-pin]').click(); });
+    assert.deepEqual(calls, [['archive', 'a']]);
+    await React.act(async () => { resolve(); await flush(); });
+    assert.equal(host.querySelector('[data-session-archive]').disabled, false);
+  }, { favorites: true });
+});
+
+test('archive controls reserve three targets at 220px without hover layout shifts', () => {
+  const title = source.match(/\.dsh-nav-fold-session-title\s*\{([^}]*)\}/)?.[1];
+  const actions = source.match(/\.dsh-nav-fold-session-actions\s*\{([^}]*)\}/)?.[1];
+  assert.match(title, /padding-right:\s*82px/);
+  assert.match(title, /overflow:\s*hidden/);
+  assert.match(actions, /position:\s*absolute/);
+  assert.match(actions, /gap:\s*2px/);
+  assert.match(source, /@media\s*\(hover:\s*none\)[^\n]*\.dsh-nav-fold-session-actions/);
 });

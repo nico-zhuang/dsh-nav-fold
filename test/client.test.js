@@ -71,6 +71,11 @@ function start(html = navigation(), savedState, savedOrder, setup) {
     IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
     IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
     IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+    IconArchiveOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+    Button: ({ children, ...props }) => React.createElement('button', { type: 'button', ...props }, children),
+    Modal: ({ open, title, description, footer, onClose, children }) => open && React.createElement('div', { role: 'dialog', 'aria-label': title },
+      React.createElement('p', null, description), children, footer,
+      React.createElement('button', { type: 'button', 'aria-label': 'Close dialog', onClick: onClose }, '×')),
   }; throw Error(`unexpected dependency: ${id}`); });
   const disposers = [];
   client.apply({ effect: (fn) => { disposers.push(fn()); }, ...services });
