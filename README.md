@@ -12,7 +12,7 @@
 
 ## 安装与升级
 
-正式发布后，从 [v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 下载 `dsh-nav-fold-0.4.5.tgz`，或用 DSH CLI 安装：
+从 [v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 下载 `dsh-nav-fold-0.4.5.tgz`，或用 DSH CLI 安装：
 
 ```sh
 dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.5/dsh-nav-fold-0.4.5.tgz
@@ -57,7 +57,7 @@ dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.
 
 ### v0.4.4 新增：会话悬停操作
 
-活动和收藏会话行在鼠标悬停或键盘聚焦时显示三点菜单与 Pin 按钮；触屏不依赖悬停。Pin 直接调用 DSH 的 `uiWorkspace.pinSession/unpinSession`，改动的是原生置顶列表，不另存一套收藏数据；失败会提示重试且不虚报成功。三点按钮使用 DSH 自带菜单组件，仅提供**打开会话、收藏／取消收藏、复制会话 ID（剪贴板可用时）**；由于树状区的完整右键菜单不提供公开开启接口，本版不冒充完整的原生右键菜单，未加入重命名／归档／分叉。
+活动和收藏会话行在鼠标悬停或键盘聚焦时显示三点菜单与 Pin 按钮；触屏不依赖悬停。Pin 直接调用 DSH 的 `uiWorkspace.pinSession/unpinSession`，改动的是原生置顶列表，不另存一套收藏数据；失败会提示重试且不虚报成功。三点按钮使用 DSH 自带菜单组件，仅提供**打开会话、收藏／取消收藏、复制会话 ID（剪贴板可用时）**；由于树状区的完整右键菜单不提供公开开启接口，v0.4.4 当时不冒充完整的原生右键菜单，未加入重命名／归档／分叉。
 
 | 深色 · 三点菜单 | 浅色 · 会话 Pin |
 | --- | --- |
