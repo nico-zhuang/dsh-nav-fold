@@ -633,6 +633,7 @@ test('explicit archive confirmation stops once, guards pending submissions and p
     await React.act(async () => { reject(Error('temporary stop failure')); await flush(); });
     assert.ok(host.querySelector('[role="dialog"]'), 'failed confirmation remains retryable');
     assert.match(host.querySelector('[role="dialog"] [role="alert"]').textContent, /重试|retry/i);
+    assert.equal(host.querySelector('[role="dialog"] [role="alert"]').className, 'dsh-nav-fold-archive-error', 'retry error needs styling even when Modal portals outside the row');
     await React.act(async () => { confirm().click(); });
     assert.deepEqual(JSON.parse(JSON.stringify(calls)), [['a'], ['a', { stopActivity: true }], ['a', { stopActivity: true }]]);
     await React.act(async () => { resolve(); await flush(); });
@@ -683,6 +684,10 @@ test('ordinary archive request blocks concurrent Pin and duplicate menu submissi
     await React.act(async () => { resolve(); await flush(); });
     assert.equal(host.querySelector('[data-session-archive]').disabled, false);
   }, { favorites: true });
+});
+
+test('archive confirmation retry error retains danger styling outside the row portal', () => {
+  assert.match(source, /\.dsh-nav-fold-archive-error\s*\{[^}]*color:\s*var\(--dsw-alias-label-danger/);
 });
 
 test('archive controls reserve three targets at 220px without hover layout shifts', () => {
