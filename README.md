@@ -1,6 +1,6 @@
-# dsh-nav-fold · v0.4.4
+# dsh-nav-fold · v0.4.5
 
-> 基于 DSH 0.2.1-rc.5 实测。全局导航折叠维持原有用法；新增的工作区三栏需要在插件配置中主动开启并保存，安装后默认关闭。
+> 基于 DSH 0.2.1-rc.5 验证。全局导航折叠维持原有用法；工作区三栏需要在插件配置中主动开启并保存，安装后默认关闭。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
 
 **一条细线，收起全局导航。工作区视图，按需开启。**
 
@@ -12,10 +12,10 @@
 
 ## 安装与升级
 
-从 [v0.4.4 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.4) 下载 `dsh-nav-fold-0.4.4.tgz`，或用 DSH CLI 安装：
+正式发布后，从 [v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 下载 `dsh-nav-fold-0.4.5.tgz`，或用 DSH CLI 安装：
 
 ```sh
-dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.4/dsh-nav-fold-0.4.4.tgz
+dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.5/dsh-nav-fold-0.4.5.tgz
 ```
 
 升级后重启 DSH；工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场更新有独立审核周期；以本页 GitHub Release 安装包为准。
@@ -65,12 +65,18 @@ dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.
 
 > 截图来自 DSH 0.2.1-rc.5 匿名独立 Host 中的非空试验会话，220px 模拟会话列宽；测试环境不含个人会话或模型密钥。
 
+### v0.4.5 新增：安全归档活动与收藏会话
+
+活动和收藏行增加独立归档按钮，三点菜单也提供归档；两者均调用 DSH 原生 `uiWorkspace.archiveSession`，不跳转、不直接改写会话文件或自建归档状态。请求成功后仍等待宿主更新 `archivedSessionIds` 才移除行，不提前假装归档成功。请求中阻止重复提交及并发 Pin；普通失败保留会话并提示重试。
+
+如果宿主明确拒绝归档运行中的会话，才显示「归档并停止」确认；取消不停止任务，确认后才调用 `archiveSession(id, { stopActivity: true })`。确认失败时保留弹窗及错误提示供重试；缺失归档 API 时按钮不可用，不猜测其他停止或删除路径。**此运行中路径仅经过模拟测试，未用真实模型密钥或真实运行任务验收。**
+
 ## 兼容与边界
 
 - rc.5 的 `sidebar.workspaces` 是只能渲染一个占用者的官方 slot。插件只在活动／收藏临时注册自己的替代视图，原生工作区节点不移走、不删除；开关关闭时注销自己的 slot、DOM 和监听器。第三方已占用、后来占用或宿主结构不符时主动撤出；明确竞争时尽可能将后台设置自动保存为关闭，不触碰其他插件节点。原生注册者身份按本机 rc.5 已发布构建校验；构建变化造成不匹配时安全地留在原生工作区，不尝试猜测接管。冲突解除后仍需进入设置页重新保存开启。
 - 自动检测不能识别任意插件私有的全局 CSS 或恶意 DOM 修改，因此不声称与所有未来插件百分百无冲突；未知宿主结构默认展示原生工作区，不尝试强行接管。
-- 活动按待处理、运行中、明确未读的完成项及最近会话排序；普通空闲不假装完成或出错。收藏取自 DSH 的 `pinnedSessionIds`；空白、归档和子代理会话不进入普通列表。点击会话委托 DSH 原生 `uiWorkspace.openSession`。
+- 活动按待处理、运行中、明确未读的完成项及最近会话排序；普通空闲不假装完成或出错。收藏取自 DSH 的 `pinnedSessionIds`；空白、归档和子代理会话不进入普通列表。点击会话委托 DSH 原生 `uiWorkspace.openSession`；v0.4.5 的归档操作委托 `uiWorkspace.archiveSession`，以宿主归档快照为准。
 - Host 配置 `workspaceViewsEnabled` 默认为 false，旧试用版 localStorage 中的 `on` 不会绕过它；Tab 选择仍仅存本浏览器本地。不会写入会话正文或工作区文件，导航折叠/顺序的旧本地键保持兼容。
-- v0.4.3 的工作区三栏与 v0.4.4 的会话操作仅在 DSH 0.2.1-rc.5 的已发布构建及匿名独立宿主内验证；其他 Host 版本或未知侧栏结构会安全保持原生工作区，不承诺与所有第三方私有 CSS/DOM 百分百兼容。原全局导航折叠与置顶会话仍沿用本机现有偏好；升级不会清理用户数据。旧的匿名互动试验稿不能替代新设置页的真实宿主验收。
+- v0.4.3 的工作区三栏、v0.4.4 的悬停会话操作与 v0.4.5 的归档安全路径基于 DSH 0.2.1-rc.5 的已发布构建、匿名独立宿主及自动化测试验证；运行中真实模型会话的归档路径仅经过模拟测试。其他 Host 版本或未知侧栏结构会安全保持原生工作区，不承诺与所有第三方私有 CSS/DOM 百分百兼容。原全局导航折叠与置顶会话仍沿用本机现有偏好；升级不会清理用户数据。旧的匿名互动试验稿不能替代新设置页的真实宿主验收。
 
 开发验证：Node.js 20+ 运行 `npm ci --legacy-peer-deps && npm test`。jsdom、React 与 Schemastery 仅用于本仓测试；`@deepseek-ai/cordis` 是 DSH 宿主提供的 peer，不随 GitHub 安装包打入。
