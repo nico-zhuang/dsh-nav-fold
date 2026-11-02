@@ -1,4 +1,4 @@
-# dsh-nav-fold · v0.4.3
+# dsh-nav-fold · v0.4.4
 
 > 基于 DSH 0.2.1-rc.5 实测。全局导航折叠维持原有用法；新增的工作区三栏需要在插件配置中主动开启并保存，安装后默认关闭。
 
@@ -12,13 +12,13 @@
 
 ## 安装与升级
 
-从 [v0.4.3 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.3) 下载 `dsh-nav-fold-0.4.3.tgz`，或用 DSH CLI 安装：
+从 [v0.4.4 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.4) 下载 `dsh-nav-fold-0.4.4.tgz`，或用 DSH CLI 安装：
 
 ```sh
-dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.3/dsh-nav-fold-0.4.3.tgz
+dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.4/dsh-nav-fold-0.4.4.tgz
 ```
 
-升级后重启 DSH；新工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场收录有独立审核周期，未同步为 v0.4.3 之前请以本页 Release 安装包为准。
+升级后重启 DSH；工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场更新有独立审核周期；以本页 GitHub Release 安装包为准。
 
 ## 交互，刚好够用
 
@@ -55,12 +55,22 @@ dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.
 
 活动行状态仅使用 DSH 的 `StateDot` 圆点：明确待处理为黄、运行中为蓝（轻微循环呼吸，减少动态效果时停用）、明确完成未读为绿；普通空闲不显示任何状态圆点，也不推断为错误。活动／收藏的当前主会话沿用 DSH 原生高亮主题；打开其他主面板时不误标为当前会话。
 
+### v0.4.4 新增：会话悬停操作
+
+活动和收藏会话行在鼠标悬停或键盘聚焦时显示三点菜单与 Pin 按钮；触屏不依赖悬停。Pin 直接调用 DSH 的 `uiWorkspace.pinSession/unpinSession`，改动的是原生置顶列表，不另存一套收藏数据；失败会提示重试且不虚报成功。三点按钮使用 DSH 自带菜单组件，仅提供**打开会话、收藏／取消收藏、复制会话 ID（剪贴板可用时）**；由于树状区的完整右键菜单不提供公开开启接口，本版不冒充完整的原生右键菜单，未加入重命名／归档／分叉。
+
+| 深色 · 三点菜单 | 浅色 · 会话 Pin |
+| --- | --- |
+| ![匿名真实 DSH：活动会话的三点菜单](docs/images/activity-v044-menu-dark.png) | ![匿名真实 DSH：活动会话的 Pin 按钮](docs/images/activity-v044-hover-light.png) |
+
+> 截图来自 DSH 0.2.1-rc.5 匿名独立 Host 中的非空试验会话，220px 模拟会话列宽；测试环境不含个人会话或模型密钥。
+
 ## 兼容与边界
 
 - rc.5 的 `sidebar.workspaces` 是只能渲染一个占用者的官方 slot。插件只在活动／收藏临时注册自己的替代视图，原生工作区节点不移走、不删除；开关关闭时注销自己的 slot、DOM 和监听器。第三方已占用、后来占用或宿主结构不符时主动撤出；明确竞争时尽可能将后台设置自动保存为关闭，不触碰其他插件节点。原生注册者身份按本机 rc.5 已发布构建校验；构建变化造成不匹配时安全地留在原生工作区，不尝试猜测接管。冲突解除后仍需进入设置页重新保存开启。
 - 自动检测不能识别任意插件私有的全局 CSS 或恶意 DOM 修改，因此不声称与所有未来插件百分百无冲突；未知宿主结构默认展示原生工作区，不尝试强行接管。
 - 活动按待处理、运行中、明确未读的完成项及最近会话排序；普通空闲不假装完成或出错。收藏取自 DSH 的 `pinnedSessionIds`；空白、归档和子代理会话不进入普通列表。点击会话委托 DSH 原生 `uiWorkspace.openSession`。
 - Host 配置 `workspaceViewsEnabled` 默认为 false，旧试用版 localStorage 中的 `on` 不会绕过它；Tab 选择仍仅存本浏览器本地。不会写入会话正文或工作区文件，导航折叠/顺序的旧本地键保持兼容。
-- v0.4.3 的新增工作区三栏仅在 DSH 0.2.1-rc.5 的已发布构建及匿名独立宿主内验证；其他 Host 版本或未知侧栏结构会安全保持原生工作区，不承诺与所有第三方私有 CSS/DOM 百分百兼容。原全局导航折叠与置顶会话仍沿用本机现有偏好；升级不会清理用户数据。旧的匿名互动试验稿不能替代新设置页的真实宿主验收。
+- v0.4.3 的工作区三栏与 v0.4.4 的会话操作仅在 DSH 0.2.1-rc.5 的已发布构建及匿名独立宿主内验证；其他 Host 版本或未知侧栏结构会安全保持原生工作区，不承诺与所有第三方私有 CSS/DOM 百分百兼容。原全局导航折叠与置顶会话仍沿用本机现有偏好；升级不会清理用户数据。旧的匿名互动试验稿不能替代新设置页的真实宿主验收。
 
 开发验证：Node.js 20+ 运行 `npm ci --legacy-peer-deps && npm test`。jsdom、React 与 Schemastery 仅用于本仓测试；`@deepseek-ai/cordis` 是 DSH 宿主提供的 peer，不随 GitHub 安装包打入。

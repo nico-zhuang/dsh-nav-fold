@@ -9,10 +9,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.3 bundle requests sidebar, session and workspace client modules', () => {
+test('v0.4.4 bundle requests sidebar, session and workspace client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.3', 'public release must differ from the previous v0.4.2 tag');
+  assert.equal(manifest.version, '0.4.4', 'released archive must have the v0.4.4 package version');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
@@ -64,7 +64,14 @@ function start(html = navigation(), savedState, savedOrder, setup) {
   assert.match(code, /window\.__ModuleLoader__\.load/, 'client bundle must exist');
   vm.runInNewContext(code, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver });
   assert.equal(bundle.id, 'dsh-nav-fold');
-  const client = bundle.factory((id) => { if (id === 'react') return React; if (id === '@deepseek-ai/dsh-client-ui-primitives') return { StateDot: ({ state }) => React.createElement('span', { 'data-host-state-dot': state }) }; throw Error(`unexpected dependency: ${id}`); });
+  const client = bundle.factory((id) => { if (id === 'react') return React; if (id === '@deepseek-ai/dsh-client-ui-primitives') return {
+    StateDot: ({ state }) => React.createElement('span', { 'data-host-state-dot': state }),
+    Menu: ({ anchor, children, open }) => React.createElement('span', null, anchor, open && React.createElement('span', { role: 'menu' }, children)),
+    MenuItemButton: ({ onSelect, children }) => React.createElement('button', { type: 'button', onClick: onSelect }, children),
+    IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+    IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+    IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+  }; throw Error(`unexpected dependency: ${id}`); });
   const disposers = [];
   client.apply({ effect: (fn) => { disposers.push(fn()); }, ...services });
   return { dom, client, dispose: () => { for (const fn of disposers.reverse()) fn(); }, doc: dom.window.document };
@@ -208,7 +215,7 @@ test('alternate workspace occupant renders real session rows and native pinned f
     assert.match(activity, /data-host-state-dot="ongoing"/, 'running state uses the official host StateDot primitive');
     const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
     assert.match(css, /\[data-dsh-workspace-view\]/);
-    assert.match(css, /\.dsh-nav-fold-session:focus-visible/);
+    assert.match(css, /\.dsh-nav-fold-session-main:focus-visible/, 'focus follows the actual open button, not the row wrapper');
     assert.match(css, /\.dsh-nav-fold-session-subtitle\s*\{[^}]*color:\s*color-mix\(/, 'subtitle must adapt to both theme foregrounds rather than #888 on white');
     assert.match(css, /\.dsh-nav-fold-empty\s*\{[^}]*color:\s*color-mix\(/);
     assert.match(css, /\[data-dsh-workspace-view\][^}]*animation:\s*dshWorkspaceEnter/, 'alternate content should ease in without animating native tree');
@@ -462,6 +469,11 @@ test('repeated host row replacement cannot continually reinject the removed cont
   peer.observe(nav, { childList: true });
   try {
     nav.append(doc.createElement('span'));
+    const deadline = Date.now() + 500;
+    while ((nav.querySelector('[data-sidebar-nav-toggle]') || nav.hasAttribute('data-sidebar-nav-collapsed')) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // After native ownership wins, observe another tick to catch unwanted reinjection.
     await new Promise(resolve => setTimeout(resolve, 60));
     assert.equal(capped, false);
     assert.ok(replacements <= 2, 'a host that owns the row list must not be fought indefinitely');

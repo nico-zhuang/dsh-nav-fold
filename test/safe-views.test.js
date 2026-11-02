@@ -13,7 +13,7 @@ const html = `<div class="kB3qhq_root"><nav class="_3WPZCG_panelList" aria-label
 const native = () => ({ options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' } } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, uiWorkspace = {} } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
@@ -44,10 +44,18 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
   let bundle;
   vm.runInNewContext(source, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver });
   const client = bundle.factory((id) => id === 'react' ? React : id === '@deepseek-ai/dsh-client-ui-primitives'
-    ? { StateDot: ({ state }) => React.createElement('i', { 'data-dsh-state-dot': state }) }
+    ? {
+      StateDot: ({ state }) => React.createElement('i', { 'data-dsh-state-dot': state }),
+      Menu: ({ anchor, children, open, onClose }) => React.createElement('span', null, anchor,
+        open && React.createElement('div', { role: 'menu', onKeyDown: event => { if (event.key === 'Escape') onClose(); } }, children)),
+      MenuItemButton: ({ onSelect, children }) => React.createElement('button', { type: 'button', role: 'menuitem', onClick: onSelect }, children),
+      IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+      IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+      IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
+    }
     : (() => { throw Error(`unexpected dependency ${id}`); })());
   const disposers = [];
-  client.apply({ effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); }, slots, sessions: {}, uiWorkspace: {}, configForms: { get: () => form } });
+  client.apply({ effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); }, slots, sessions: {}, uiWorkspace, configForms: { get: () => form } });
   return { dom, doc: dom.window.document, slots, form, entries, settingsPages, dispose: () => { for (const fn of disposers.reverse()) fn(); dom.window.close(); } };
 }
 
@@ -404,4 +412,131 @@ test('running dot alone has a looping pulse and respects reduced motion', async 
     assert.match(source, /\.dsh-nav-fold-state-dot-running\s*\{[^}]*animation:[^}]*infinite/);
     assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.dsh-nav-fold-state-dot-running[^}]*animation:\s*none/);
   } finally { app.dispose(); }
+});
+
+test('pin button is a sibling of the open button and persists through uiWorkspace', async () => {
+  const calls = [];
+  const app = mount({ active: true, uiWorkspace: {
+    openSession: id => calls.push(['open', id]),
+    pinSession: async id => { calls.push(['pin', id]); },
+    unpinSession: async id => { calls.push(['unpin', id]); },
+  } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } }),
+      useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: [] }),
+    })); });
+    const row = host.querySelector('.dsh-nav-fold-session');
+    const open = row?.querySelector('.dsh-nav-fold-session-main');
+    const pin = row?.querySelector('[data-session-pin]');
+    assert.ok(open && pin, 'main open and pin are separate controls');
+    assert.equal(open.contains(pin), false, 'do not nest interactive buttons');
+    assert.equal(pin.getAttribute('aria-pressed'), 'false');
+    await React.act(async () => { pin.click(); await flush(); });
+    assert.deepEqual(calls, [['pin', 'a']], 'Pin must not open conversation');
+    await React.act(async () => { open.click(); });
+    assert.deepEqual(calls, [['pin', 'a'], ['open', 'a']]);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('ellipsis menu opens safe session actions without activating the main row', async () => {
+  const calls = [];
+  const app = mount({ active: true, uiWorkspace: {
+    openSession: id => calls.push(['open', id]),
+    pinSession: async id => { calls.push(['pin', id]); },
+  } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  Object.defineProperty(app.dom.window.navigator, 'clipboard', { configurable: true,
+    value: { writeText: async text => { calls.push(['copy', text]); } } });
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } }),
+      useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: [] }),
+    })); });
+    const row = host.querySelector('.dsh-nav-fold-session');
+    const dots = row?.querySelector('[data-session-menu]');
+    assert.ok(dots, 'independent ellipsis menu button exists');
+    assert.equal(dots.getAttribute('aria-haspopup'), 'menu');
+    await React.act(async () => { dots.click(); });
+    let items = [...host.querySelectorAll('[role="menuitem"]')];
+    assert.equal(items.length, 3, 'Open, Pin and Copy ID are the safe menu actions');
+    assert.deepEqual(calls, [], 'opening menu does not open the conversation');
+    await React.act(async () => { items[2].click(); await flush(); });
+    assert.deepEqual(calls, [['copy', 'a']]);
+    await React.act(async () => { dots.click(); });
+    items = [...host.querySelectorAll('[role="menuitem"]')];
+    await React.act(async () => { items[1].click(); await flush(); });
+    assert.deepEqual(calls, [['copy', 'a'], ['pin', 'a']]);
+    await React.act(async () => { row.dispatchEvent(new app.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
+    assert.ok(host.querySelector('[role="menu"]'), 'right-click uses the same controlled menu');
+    await React.act(async () => { host.querySelector('[role="menu"]').dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    assert.equal(host.querySelector('[role="menu"]'), null, 'Escape closes menu');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('failed unpin leaves the favorite pressed and offers retry', async () => {
+  const calls = [];
+  let fail;
+  const app = mount({ active: true, uiWorkspace: {
+    openSession: id => calls.push(['open', id]),
+    unpinSession: id => { calls.push(['unpin', id]); return new Promise((_, reject) => { fail = reject; }); },
+  } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="favorites"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Saved' } } }),
+      useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: ['a'] }),
+    })); });
+    const pin = host.querySelector('[data-session-pin]');
+    assert.equal(pin.getAttribute('aria-pressed'), 'true');
+    await React.act(async () => { pin.click(); await flush(); });
+    assert.equal(pin.disabled, true, 'in-flight writes cannot be submitted twice');
+    await React.act(async () => { fail(Error('network failure')); await flush(); });
+    assert.deepEqual(calls, [['unpin', 'a']], 'never navigates while unpinning');
+    assert.equal(pin.disabled, false);
+    assert.equal(pin.getAttribute('aria-pressed'), 'true', 'failed write cannot fake new snapshot');
+    assert.match(host.querySelector('[role="alert"]').textContent, /请重试/);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('session actions reserve title space and reveal on hover, focus or touch', () => {
+  assert.match(source, /\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*56px/);
+  assert.match(source, /\.dsh-nav-fold-session:hover\s+\.dsh-nav-fold-session-actions,\s*\.dsh-nav-fold-session:focus-within\s+\.dsh-nav-fold-session-actions/);
+  assert.match(source, /@media\s*\(hover:\s*none\)\s*\{\s*\.dsh-nav-fold-session-actions\s*\{[^}]*opacity:\s*1/);
+  assert.match(source, /\.dsh-nav-fold-session-actions\s+button:focus-visible\s*\{[^}]*outline:/);
+});
+
+test('reduced motion disables the action strip fade', () => {
+  assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*\.dsh-nav-fold-session-actions\s*\{[^}]*transition:\s*none/.test(source), 'action fade must stop when reduced motion is requested');
 });
