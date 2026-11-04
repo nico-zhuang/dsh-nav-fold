@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 起点是正式 v0.4.5 commit `f7671ef3ea1833213542dcf6cc828d4c35a760cc`；只在 `fix/dsbot-workspace-peer-suspension` 分支工作。不要推送、改 tag/release/市场、强改 desktop 当前安装或重启用户 GUI。
-- 本地试用包版本 `0.4.6-preview.1`，保持既有 `0.4.5-preview.1` 包、GitHub v0.4.5 Release 与 desktop 回退档。新包出现在 ignored `artifacts/`。
+- 已产出的 `0.4.6-preview.1` 是真实 GUI 失败候选，只留 ignored `artifacts/` 作证据，**不得交付**；下一轮修正必须递增为 `0.4.6-preview.2`，不可同号重打。保持既有 `0.4.5-preview.1` 包、GitHub v0.4.5 Release 与 desktop 回退档。新包出现在 ignored `artifacts/`。
 - 不依赖 DS-Bot 名字或内部变量；真实第三方占位期间绝不注册/保留本插件覆盖。结构不可信时保留原硬隔离与手动确认门槛。
 - 不声称另一台设备或当前主 GUI 已验收；独立匿名 Host 的实际交互与模拟测试要明确区分。用户已在本机证实 Bot→Agent 可触发旧版冲突，未经新包跨设备验收不得正式发布。
 - `lib/client.js` 是手写 client bundle；保持现有公开注入、样式与归档功能，不引入新依赖或更改 `lib/index.js` 的默认关闭。
@@ -99,3 +99,10 @@ const peerOnlyConflict = (ours = false) => {
 - [ ] **Step 1: 用新的临时匿名 DSH_HOME/profile，安装两个本地包并启动单独 host**（动态端口，不占用已有 `http://127.0.0.1:53436`；不要复制任何个人配置/模型密钥/会话）。如需临时安装，仅触碰该匿名 profile，保留其绝对路径与进程 id 供验证/安全清理。
 - [ ] **Step 2: 使用 `agent-browser` 技能及可观察的 Host 工具验证**：开启三栏 → Activity → 切 Bot（DS-Bot TeamSidebar 存在，本插件覆盖与三栏消失，配置仍 true）→ Agent（DS-Bot 注销，本插件三栏与 Activity 自动恢复）→ 再切 Bot/Agent。记录 `entries/entriesOfSlot` 与 configForm 变更的真实观察，不把测试夹具或页面截图冒充另一个设备验收。
 - [ ] **Step 3: 使用同一匿名 host 人为造成可控的结构异常，只在测试 profile 验证 hard quarantine**；如果无法安全做，不动用户 GUI，报告它仅有自动回归覆盖。记录成功/限制、安装包哈希、清理临时 host 后状态。最终独立 whole-branch review 通过后，保留该分支与 worktree，交付本地预览及跨设备验证步骤；正式发版另待用户验收。
+
+### Task 4: preview.1 的真实 GUI 失败后纠正分类，再产 preview.2
+
+- [ ] **先核证根因**：只用匿名 Host 中带日志的临时安装副本诊断；在 `artifacts/DSBOT_LIVE_DIAG_v046p1.md` 记录脱敏证据。原生完整形状的 `Gb` 与 DS-Bot 简形状的 `Gb` 确实并存；scope 本身正确，但 raw entry `options.name` 不存在。清理临时 hook，核对已还原包字节。**不要修改 desktop 或声称 preview.1 通过。**
+- [ ] **先写 RED 测试、再改生产代码**：fixture 表现真实元数据（同 `Gb` registrant、priority -101、缺失 `options.name`）；Bot 占位必须撤 own/bar 且不保存 false；Agent 返回必须恢复 Activity/三栏并保留开启；两次切换可重复。完整原生形状重复、显式错 slot 名、缺失可信原生/slot spec 错、被移动/篡改的 bar 保持硬隔离。原生 identity 必须来自完整 locale/children 检查，不以裸 registrant 唯一性当安全证明；scoped entries 允许缺少 `options.name`，但明确提供错名仍视结构错误。
+- [ ] **最小改动与回归**：只修 `peerOnlyConflict()` 的错误身份/可选字段判断和必要 fixture；保留胜出前 detached、空原生过渡、布局过渡与原 hard fallback。独立源码审查后，将 manifest/lock/版本断言/README 改为 `0.4.6-preview.2`（两阶段源提交可审），全套 `npm test` 和 six-file/HEAD 逐字节打包，单独收据 SHA；绝不以 preview.1 同号重包。
+- [ ] **实际 GUI 重新验收**：使用已建匿名 profile + 新预览包，原先补日志的 client copy 必须还原或被新包替换；命名浏览器会话里实际 Agent（Activity/Favorites）→ Bot（Bot 列表，自己三栏/slot 撤出且设置 true）→ Agent（原三栏/视图恢复，设置 true），至少两轮，稳定后重读设置，必要时 reload。若仍失败继续诊断，不交付；若通过再做整体 review，停止匿名 Host，核对用户 desktop 未变，仅交付 preview.2 供另一设备验收，不发布 GitHub。
