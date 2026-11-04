@@ -1,6 +1,6 @@
-# dsh-nav-fold · v0.4.6（本地正式候选，未发布）
+# dsh-nav-fold · v0.4.6
 
-> `0.4.6` 正在准备为正式版本，但当前只是**本地候选：未公开发布、未提交市场更新 PR**；[v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 仍是最新公开正式版。`0.4.6-preview.1` 的双插件真实 GUI 失败、`0.4.6-preview.2` 的严格错名安全审查失败，均不可交付。`0.4.6-preview.3` 的源码修正已独立审查，自动化测试 89/89、匿名宿主两轮 DS-Bot/Agent 切换和故意结构损坏的硬回退均通过；另一设备仅反馈**一轮实际使用正常**，尚未明确验证 Bot→Agent 切换和重启持久性。用户当前主 GUI 的新版重启后实测、正式候选包复核及跨设备验收尚待完成，不能据此宣称偶发问题根治或批准发布。全局导航折叠维持原有用法；工作区三栏需在插件配置中主动开启并保存，安装后默认关闭。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
+> v0.4.6 在保留真正侧栏冲突时安全回退的前提下，适配 DS-Bot 模式切换时的临时占位。自动化测试 89/89 通过；匿名独立宿主上两轮实际 Agent→Bot→Agent 切换、Activity/Favorites 原选视图恢复、刷新持久性和故意自有控件损坏后的硬回退已验证。另一设备仅反馈**一轮实际使用正常**；用户主桌面 GUI 未做新版重启后实测，另一设备也未明确验证模式切换与重启持久性。按维护者决定先发布，以上未覆盖范围仍须如实保留，**不能把一次反馈当作偶发问题已根治的证明**。全局导航折叠维持原有用法；工作区三栏默认关闭，须在插件配置中主动保存开启。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
 
 **一条细线，收起全局导航。工作区视图，按需开启。**
 
@@ -12,13 +12,13 @@
 
 ## 安装与升级
 
-**公开正式版（v0.4.5）：**从 [v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 下载 `dsh-nav-fold-0.4.5.tgz`，或用 DSH CLI 安装：
+**v0.4.6 安装：**从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.6) 下载 `dsh-nav-fold-0.4.6.tgz`，或用 DSH CLI 安装：
 
 ```sh
-dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.5/dsh-nav-fold-0.4.5.tgz
+dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.6/dsh-nav-fold-0.4.6.tgz
 ```
 
-**本地正式候选（v0.4.6，未发布）：**本分支的 `artifacts/dsh-nav-fold-0.4.6.tgz` 仅在完成本机主 GUI 重启后实测、另一设备模式切换与最终复核之后才可作为 GitHub Release 与市场更新的安装来源；当前不提供公开下载链接。preview.1 真实 GUI 失败、preview.2 严格错名安全审查失败，两份旧包不得安装交付；preview.3 是已通过匿名环境测试但仍待完整跨设备验收的开发预览。正式安装或升级后须正常重启 DSH；工作区三栏依旧**默认关闭**，需在插件配置中主动保存开启。市场现有条目仍指向 v0.4.5，更新 PR 不得先指向不存在的 0.4.6 Release 包。
+升级后须正常重启 DSH；三栏依旧**默认关闭**，需在插件配置中主动保存开启。v0.4.5 的归档包仍保留在[旧版 Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5)，遇兼容问题可按相同方式重装回退。preview.1 真实 GUI 失败、preview.2 严格错名安全审查失败，两个旧包不得安装交付。
 
 ## 交互，刚好够用
 
