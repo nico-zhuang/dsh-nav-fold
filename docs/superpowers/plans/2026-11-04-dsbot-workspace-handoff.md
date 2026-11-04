@@ -66,7 +66,7 @@ const peerOnlyConflict = (ours = false) => {
 };
 ```
 
-- [ ] **Step 4: 验证 GREEN**：重复定点命令并确认新测试通过；运行全体 `node --test test/safe-views.test.js` 确认先前写好的竞态/预先占位/硬隔离回归同时绿。若回归失败，只改生产代码中造成失败的最小分支，不降级保护断言。
+- [ ] **Step 4: 验证 GREEN**：重复定点命令并确认新测试通过；运行全体 `node --test test/safe-views.test.js` 确认先前写好的竞态/预先占位/硬隔离回归同时绿。额外验证原生注册簿暂时为空、sidebar region/footer 暂缺仍按 v0.4.5 只撤出不写 false，恢复时重新校验；在自身注册回调中同步加入 peer 必须让位；Workspace 已可见时插入和撤出多个 peer 不写 false；优先级不获胜时 peer 离开也不得先显示三栏。上述修正均先增加失败断言再改实现。若回归失败，只改生产代码中造成失败的最小分支，不降级保护断言。
 - [ ] **Step 5: 更新 README 第 76 行**：第三方进入时仅运行时安全让位、其撤出且严格校验通过后自动恢复；宿主结构或身份异常仍撤出并自动保存为关闭，需设置页手动重试。运行 `node --test test/safe-views.test.js`、`npm test`、`node --check lib/client.js`、`git diff --check`，期望 0 失败。commit `fix: suspend workspace views during temporary slot competition`。
 
 ### Task 2: 生成独立 0.4.6-preview.1 验收包
