@@ -1,6 +1,6 @@
-# dsh-nav-fold · v0.4.5
+# dsh-nav-fold · v0.4.6
 
-> 基于 DSH 0.2.1-rc.5 验证。全局导航折叠维持原有用法；工作区三栏需要在插件配置中主动开启并保存，安装后默认关闭。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
+> v0.4.6 在保留真正侧栏冲突时安全回退的前提下，适配 DS-Bot 模式切换时的临时占位。自动化测试 89/89 通过；匿名独立宿主上两轮实际 Agent→Bot→Agent 切换、Activity/Favorites 原选视图恢复、刷新持久性和故意自有控件损坏后的硬回退已验证。另一设备仅反馈**一轮实际使用正常**；用户主桌面 GUI 未做新版重启后实测，另一设备也未明确验证模式切换与重启持久性。按维护者决定先发布，以上未覆盖范围仍须如实保留，**不能把一次反馈当作偶发问题已根治的证明**。全局导航折叠维持原有用法；工作区三栏默认关闭，须在插件配置中主动保存开启。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
 
 **一条细线，收起全局导航。工作区视图，按需开启。**
 
@@ -12,13 +12,13 @@
 
 ## 安装与升级
 
-从 [v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 下载 `dsh-nav-fold-0.4.5.tgz`，或用 DSH CLI 安装：
+**v0.4.6 安装：**从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.6) 下载 `dsh-nav-fold-0.4.6.tgz`，或用 DSH CLI 安装：
 
 ```sh
-dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.5/dsh-nav-fold-0.4.5.tgz
+dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.6/dsh-nav-fold-0.4.6.tgz
 ```
 
-升级后重启 DSH；工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场更新有独立审核周期；以本页 GitHub Release 安装包为准。
+升级后须正常重启 DSH；三栏依旧**默认关闭**，需在插件配置中主动保存开启。v0.4.5 的归档包仍保留在[旧版 Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5)，遇兼容问题可按相同方式重装回退。preview.1 真实 GUI 失败、preview.2 严格错名安全审查失败，两个旧包不得安装交付。
 
 ## 交互，刚好够用
 
@@ -73,7 +73,7 @@ dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.
 
 ## 兼容与边界
 
-- rc.5 的 `sidebar.workspaces` 是只能渲染一个占用者的官方 slot。插件只在活动／收藏临时注册自己的替代视图，原生工作区节点不移走、不删除；开关关闭时注销自己的 slot、DOM 和监听器。第三方已占用、后来占用或宿主结构不符时主动撤出；明确竞争时尽可能将后台设置自动保存为关闭，不触碰其他插件节点。原生注册者身份按本机 rc.5 已发布构建校验；构建变化造成不匹配时安全地留在原生工作区，不尝试猜测接管。冲突解除后仍需进入设置页重新保存开启。
+- rc.5 的 `sidebar.workspaces` 是只能渲染一个占用者的官方 slot。插件只在活动／收藏临时注册自己的替代视图，原生工作区节点不移走、不删除；开关关闭时注销自己的 slot、DOM 和监听器。已验证原生项与第三方临时竞争时，仅在运行时撤出自身视图和控件，不保存关闭；原生注册簿暂时为空或宿主 region/footer 短暂缺失且自身栏完好时也只运行时撤出。宿主恢复且自身注册确认成为唯一优先占用者后才显示控件并恢复原选视图。宿主 slot／原生身份或插件栏 DOM 结构异常仍硬隔离：撤出自身并尝试将后台设置保存为关闭，须在设置页手动保存开启后重试，不触碰其他插件节点。原生注册者身份按本机 rc.5 已发布构建校验；构建变化造成不匹配时不猜测接管。
 - 自动检测不能识别任意插件私有的全局 CSS 或恶意 DOM 修改，因此不声称与所有未来插件百分百无冲突；未知宿主结构默认展示原生工作区，不尝试强行接管。
 - 活动按待处理、运行中、明确未读的完成项及最近会话排序；普通空闲不假装完成或出错。收藏取自 DSH 的 `pinnedSessionIds`；空白、归档和子代理会话不进入普通列表。点击会话委托 DSH 原生 `uiWorkspace.openSession`；v0.4.5 的归档操作委托 `uiWorkspace.archiveSession`，以宿主归档快照为准。
 - Host 配置 `workspaceViewsEnabled` 默认为 false，旧试用版 localStorage 中的 `on` 不会绕过它；Tab 选择仍仅存本浏览器本地。不会写入会话正文或工作区文件，导航折叠/顺序的旧本地键保持兼容。
