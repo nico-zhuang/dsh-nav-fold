@@ -10,10 +10,10 @@ import { createRoot } from 'react-dom/client';
 
 const source = fs.readFileSync(fileURLToPath(new URL('../lib/client.js', import.meta.url)), 'utf8');
 const html = `<div class="kB3qhq_root"><nav class="_3WPZCG_panelList" aria-label="Global panels"><button class="_3WPZCG_panelRow" aria-label="Plugins"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">Plugins</span></button></nav><div class="kB3qhq_regionArea" id="workspaces">Native workspace tree</div><div class="kB3qhq_footArea"></div></div>`;
-const native = () => ({ options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' } } });
+const native = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.directoryFlow': { kind: 'list' }, 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' }, 'sidebar.session.row.leading': { kind: 'list' }, 'sidebar.session.row.hover': { kind: 'list' } } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, mode = 'workspace', uiWorkspace = {} } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, mode = 'workspace', uiWorkspace = {}, rawScoped = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
@@ -27,7 +27,9 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     publish(value) { this.snapshot = { status: 'ready', value: { workspaceViewsEnabled: value }, writable: true, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
     setStatus(status) { this.snapshot = { ...this.snapshot, status, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
   };
-  const entries = [...(nativePresent ? [native()] : []), ...peers];
+  const nativeEntries = new Set();
+  const entries = [...(nativePresent ? [native(rawScoped)] : []), ...peers];
+  if (nativePresent) nativeEntries.add(entries[0]);
   const settingsPages = new Map();
   const changes = new Set();
   let notificationCount = 0;
@@ -38,10 +40,10 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     entriesOfSlot(name) { return this.entries(name).sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0)); },
     subscribe(name, callback) { if (name === 'sidebar.workspaces') changes.add(callback); return () => changes.delete(callback); },
     inject(_name, fn) { return fn(); },
-    register(options, component) { const entry = { options: { name: options.name, priority: options.priority }, component, registrant: options.registrant, children: options.children, locale: options.locale }; if (options.name === 'plugins.bundle.config') settingsPages.set(options.key, component); if (options.name === 'sidebar.workspaces') { entries.push(entry); notify(); } return () => { settingsPages.delete(options.key); const index = entries.indexOf(entry); if (index >= 0) { entries.splice(index, 1); notify(); } }; },
-    addNative() { entries.push(native()); notify(); },
-    addPeer(registrant = 'another-sidebar', priority = 50) { entries.push({ options: { name: 'sidebar.workspaces', priority }, registrant }); notify(); },
-    removePeer(registrant = 'another-sidebar') { const index = entries.findIndex(entry => entry.registrant === registrant); if (index >= 0) { entries.splice(index, 1); notify(); } },
+    register(options, component) { const entry = { options: { ...(rawScoped && options.name === 'sidebar.workspaces' ? {} : { name: options.name }), priority: options.priority }, component, registrant: options.registrant, children: options.children, locale: options.locale }; if (options.name === 'plugins.bundle.config') settingsPages.set(options.key, component); if (options.name === 'sidebar.workspaces') { entries.push(entry); notify(); } return () => { settingsPages.delete(options.key); const index = entries.indexOf(entry); if (index >= 0) { entries.splice(index, 1); notify(); } }; },
+    addNative() { const entry = native(rawScoped); nativeEntries.add(entry); entries.push(entry); notify(); },
+    addPeer(registrant = 'another-sidebar', priority = 50) { const entry = { options: { ...(rawScoped ? {} : { name: 'sidebar.workspaces' }), priority }, registrant }; entries.push(entry); notify(); return entry; },
+    removePeer(registrant = 'another-sidebar') { const index = entries.findIndex(entry => entry.registrant === registrant && !nativeEntries.has(entry)); if (index >= 0) { entries.splice(index, 1); notify(); } },
   };
   let bundle;
   vm.runInNewContext(source, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver, Error });
@@ -130,6 +132,52 @@ test('DS-Bot slot entry pauses views and leaves saved intent intact across Bot-A
   } finally { app.dispose(); }
 });
 
+test('actual scoped Gb peer suspends Activity through two Bot-Agent cycles without saving off', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    assert.equal(app.entries.length, 2);
+    assert.ok(app.entries.every(entry => entry.options.name === undefined));
+    for (let i = 0; i < 2; i++) {
+      const peer = app.slots.addPeer('Gb', -101);
+      await flush();
+      assert.equal(peer.locale, undefined);
+      assert.equal(peer.children, undefined);
+      assert.equal(app.entries.length, 2, 'only the native entry and Gb peer remain');
+      assert.ok(app.entries.includes(peer), 'the peer remains registered');
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+      assert.deepEqual(writes, []);
+      app.slots.removePeer('Gb'); await flush();
+      assert.equal(app.entries.length, 2, 'native and own entry return after peer removal');
+      assert.equal(app.entries.includes(peer), false, 'peer removal does not remove the native Gb entry');
+      assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+      assert.deepEqual(writes, []);
+    }
+  } finally { app.dispose(); }
+});
+
+test('actual scoped Gb peer suspends Workspace without saving off', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  app.form.set = async (field, value) => { writes.push([field, value]); return true; };
+  try {
+    assert.ok(app.doc.querySelector('[data-dsh-workspace-tabs-row]'));
+    app.slots.addPeer('Gb', -101); await flush();
+    assert.equal(app.entries.length, 2);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.deepEqual(writes, []);
+    app.slots.removePeer('Gb'); await flush();
+    assert.equal(app.entries.length, 1);
+    assert.ok(app.doc.querySelector('[data-dsh-workspace-tabs-row]'));
+    assert.deepEqual(writes, []);
+  } finally { app.dispose(); }
+});
+
 test('peer arriving while Activity selected withdraws only our occupant and bar', async () => {
   const app = mount({ active: true });
   try {
@@ -211,7 +259,7 @@ test('Workspace view remains suspended until every peer leaves', async () => {
 });
 
 test('peer joining synchronously during own register keeps Activity suspended without saving off', async () => {
-  const app = mount({ active: true, syncCallbacks: true, peers: [{ options: { name: 'sidebar.workspaces' }, registrant: 'first' }], mode: 'activity' });
+  const app = mount({ active: true, syncCallbacks: true, rawScoped: true, peers: [{ options: { priority: -101 }, registrant: 'Gb' }], mode: 'activity' });
   const writes = [];
   app.form.set = async (field, value) => { writes.push(value); return true; };
   try {
@@ -222,15 +270,15 @@ test('peer joining synchronously during own register keeps Activity suspended wi
       if (join && app.entries.some(entry => entry.registrant === 'dsh-nav-fold:workspace-views')) {
         join = false;
         observed.push(Boolean(app.doc.querySelector('[data-dsh-workspace-tabs-row]')));
-        app.slots.addPeer('second');
+        app.slots.addPeer('Gb', -101);
       }
     });
-    app.slots.removePeer('first'); await flush();
+    app.slots.removePeer('Gb'); await flush();
     assert.equal(join, false, 'race was exercised');
     assert.deepEqual(observed, [false]);
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
     assert.deepEqual(writes, []);
-    app.slots.removePeer('second'); await flush();
+    app.slots.removePeer('Gb'); await flush();
     assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
     assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
     assert.deepEqual(writes, []);
@@ -460,13 +508,33 @@ test('malformed peer entry cannot be classified as a reversible competitor', asy
   }
 });
 
-test('peer spoofing native registrant beside the real native hard-quarantines', async () => {
-  const app = mount({ active: true });
+test('duplicate COMPLETE native identity beside the real native hard-quarantines', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
   try {
     app.doc.querySelector('[data-view="activity"]').click();
-    app.slots.addPeer('Gb'); await flush();
+    app.entries.push(native(true));
+    app.slots.addPeer('other'); await flush();
+    assert.deepEqual(writes, [['workspaceViewsEnabled', false]]);
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 0);
+  } finally { app.dispose(); }
+});
+
+test('explicit wrong slot name on scoped peer hard-quarantines', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    const peer = app.slots.addPeer('Gb', -101);
+    peer.options.name = 'wrong-slot';
+    await flush();
+    assert.deepEqual(writes, [['workspaceViewsEnabled', false]]);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
   } finally { app.dispose(); }
 });
 
