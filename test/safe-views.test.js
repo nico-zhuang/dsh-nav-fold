@@ -38,8 +38,8 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     subscribe(name, callback) { if (name === 'sidebar.workspaces') changes.add(callback); return () => changes.delete(callback); },
     inject(_name, fn) { return fn(); },
     register(options, component) { const entry = { options: { name: options.name, priority: options.priority }, component, registrant: options.registrant, children: options.children, locale: options.locale }; if (options.name === 'plugins.bundle.config') settingsPages.set(options.key, component); if (options.name === 'sidebar.workspaces') { entries.push(entry); notify(); } return () => { settingsPages.delete(options.key); const index = entries.indexOf(entry); if (index >= 0) { entries.splice(index, 1); notify(); } }; },
-    addPeer(registrant = 'another-sidebar') { entries.push({ options: { name: 'sidebar.workspaces' }, registrant }); notify(); },
-    removePeer() { const index = entries.findIndex(entry => entry.registrant === 'another-sidebar'); if (index >= 0) { entries.splice(index, 1); notify(); } },
+    addPeer(registrant = 'another-sidebar', priority = 50) { entries.push({ options: { name: 'sidebar.workspaces', priority }, registrant }); notify(); },
+    removePeer(registrant = 'another-sidebar') { const index = entries.findIndex(entry => entry.registrant === registrant); if (index >= 0) { entries.splice(index, 1); notify(); } },
   };
   let bundle;
   vm.runInNewContext(source, { window: Object.assign(dom.window, { __ModuleLoader__: { load: (value) => { bundle = value; } } }), document: dom.window.document, MutationObserver: dom.window.MutationObserver, Error });
@@ -91,7 +91,7 @@ test('settings accepted on creates icon tab; accepted off restores native slot w
   } finally { app.dispose(); }
 });
 
-test('pre-existing competing occupant disables alternate workspace view rather than shadowing peer', async () => {
+test('pre-existing competing occupant suspends and restores the saved workspace view', async () => {
   const peer = { options: { name: 'sidebar.workspaces', priority: 50 }, registrant: 'peer-plugin' };
   const app = mount({ active: true, peers: [peer] });
   try {
@@ -99,6 +99,32 @@ test('pre-existing competing occupant disables alternate workspace view rather t
     assert.equal(app.entries.includes(peer), true);
     assert.equal(app.entries.length, 2);
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    app.slots.removePeer('peer-plugin'); await flush();
+    assert.equal(app.entries.length, 1);
+    assert.equal(app.doc.querySelectorAll('[data-dsh-workspace-tabs] [data-view]').length, 3);
+  } finally { app.dispose(); }
+});
+
+test('DS-Bot slot entry pauses views and leaves saved intent intact across Bot-Agent switches', async () => {
+  const app = mount({ active: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    for (let i = 0; i < 2; i++) {
+      app.slots.addPeer('ds-bot-client', -101);
+      await flush();
+      assert.deepEqual(app.entries.map(entry => entry.registrant).sort(), ['Gb', 'ds-bot-client'].sort());
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+      app.slots.removePeer('ds-bot-client');
+      await flush();
+      assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+      assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
+    }
+    assert.deepEqual(writes, []);
   } finally { app.dispose(); }
 });
 
@@ -111,9 +137,12 @@ test('peer arriving while Activity selected withdraws only our occupant and bar'
     app.slots.addPeer();
     await flush();
     assert.equal(app.entries.length, 2, 'native and peer only');
-    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false, 'confirmed collision is saved as disabled');
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true, 'verified peer leaves saved intent intact');
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
     assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
+    app.slots.removePeer(); await flush();
+    assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(app.entries.length, 2, 'own view returns only after peer leaves');
   } finally { app.dispose(); }
 });
 
@@ -127,8 +156,12 @@ test('synchronous slot notifications do not recursively register or unregister o
     app.doc.querySelector('[data-view="favorites"]').click();
     assert.equal(app.entries.length, 2);
     app.slots.addPeer();
-    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
     assert.equal(app.entries.length, 2, 'native and peer remain');
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    app.slots.removePeer(); await flush();
+    assert.equal(app.doc.querySelector('[data-view="favorites"]')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(app.entries.length, 2, 'native and own entry return');
   } finally { app.dispose(); }
 });
 
@@ -143,8 +176,11 @@ test('a peer joining synchronously during our unregister is detected after the t
     app.doc.querySelector('[data-view="workspace"]').click();
     await flush();
     assert.equal(app.entries.length, 2, 'native and peer remain');
-    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    app.slots.removePeer(); await flush();
+    assert.equal(app.doc.querySelectorAll('[data-dsh-workspace-tabs] [data-view]').length, 3);
+    assert.equal(app.entries.length, 1, 'native view remains selected after peer leaves');
   } finally { app.dispose(); }
 });
 
@@ -152,9 +188,9 @@ test('failed automatic disable and form loading cannot silently rearm a quaranti
   const app = mount({ active: true });
   try {
     app.form.set = async () => false;
-    app.slots.addPeer(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
-    app.slots.removePeer(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true, 'failed disable leaves saved state unchanged');
     app.form.setStatus('loading');
     app.form.publish(true);
     await flush();
@@ -187,7 +223,7 @@ test('settings Save rejection keeps a retryable draft and explains the failure',
   }
 });
 
-test('after collision only settings off-to-on Save can rearm a now-safe view', async () => {
+test('after structural damage only settings off-to-on Save can rearm a now-safe view', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window;
   const previousDocument = globalThis.document;
@@ -195,9 +231,8 @@ test('after collision only settings off-to-on Save can rearm a now-safe view', a
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
   try {
-    app.slots.addPeer(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
-    app.slots.removePeer(); await flush();
     const host = app.doc.createElement('div'); app.doc.body.append(host);
     await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
     await React.act(async () => { host.querySelector('input').click(); });
@@ -219,8 +254,7 @@ test('a concurrent ready(true) cannot release quarantine while settings Save is 
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
   try {
-    app.slots.addPeer(); await flush();
-    app.slots.removePeer(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     const host = app.doc.createElement('div'); app.doc.body.append(host);
     await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
@@ -248,6 +282,75 @@ test('a peer masquerading as the native workspace cannot be shadowed', async () 
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
     assert.equal(app.entries.length, 1);
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+  } finally { app.dispose(); }
+});
+
+test('peer arriving with damaged owned DOM hard-quarantines instead of suspending', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove();
+    app.slots.addPeer('ds-bot-client', -101); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.deepEqual(app.entries.map(entry => entry.registrant).sort(), ['Gb', 'ds-bot-client'].sort());
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    app.slots.removePeer('ds-bot-client'); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null, 'peer departure cannot rearm hard quarantine');
+  } finally { app.dispose(); }
+});
+
+test('peer with malformed host slot specification still hard-quarantines', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.slots.spec = () => ({ kind: 'list', scope: 'root' });
+    app.slots.addPeer(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.entries.length, 2, 'only native and peer remain');
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally { app.dispose(); }
+});
+
+test('peer with corrupted native registration still hard-quarantines', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.entries[0].children = {};
+    app.slots.addPeer(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.entries.length, 2, 'only untrusted native and peer remain');
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally { app.dispose(); }
+});
+
+test('missing native registration hard-quarantines instead of waiting to resume', async () => {
+  const app = mount({ active: true, nativePresent: false });
+  try {
+    await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.entries.length, 0);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally { app.dispose(); }
+});
+
+test('peer spoofing native registrant beside the real native hard-quarantines', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.slots.addPeer('Gb'); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 0);
+  } finally { app.dispose(); }
+});
+
+test('duplicate own registration beside a peer hard-quarantines', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.entries.push({ options: { name: 'sidebar.workspaces', priority: -100 }, registrant: 'dsh-nav-fold:workspace-views' });
+    app.slots.addPeer(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
   } finally { app.dispose(); }
 });
 
