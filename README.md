@@ -1,6 +1,6 @@
-# dsh-nav-fold · v0.4.6-preview.1（本地预览）
+# dsh-nav-fold · v0.4.6-preview.2（本地预览）
 
-> 本分支的 `0.4.6-preview.1` 是供独立匿名宿主验收的**本地预览包，尚未公开发布**；[v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 仍是最新公开正式版。基于 DSH 0.2.1-rc.5 的模拟测试验证了预览版第三方 slot 临时占位让位与恢复；尚未宣称本预览包经真实 GUI 或跨设备验收。全局导航折叠维持原有用法；工作区三栏需在插件配置中主动开启并保存，安装后默认关闭。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
+> 本分支的 `0.4.6-preview.2` 是供独立匿名宿主验收的**本地预览包，尚未公开发布**；[v0.4.5 GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.5) 仍是最新公开正式版。`0.4.6-preview.1` 已在双插件真实 GUI 切换中失败，现被取代且不可交付；preview.2 的修正目前通过模拟测试，**尚未完成 preview.2 的真实 GUI 或跨设备验收**。全局导航折叠维持原有用法；工作区三栏需在插件配置中主动开启并保存，安装后默认关闭。v0.4.5 的归档安全路径已在匿名独立宿主和模拟测试中验证；运行中真实模型会话的归档路径仅经模拟测试，未作真实模型运行验收。
 
 **一条细线，收起全局导航。工作区视图，按需开启。**
 
@@ -18,7 +18,7 @@
 dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.5/dsh-nav-fold-0.4.5.tgz
 ```
 
-**本地预览版（v0.4.6-preview.1）：**本分支可构建的 `artifacts/dsh-nav-fold-0.4.6-preview.1.tgz` 仅供独立匿名宿主验收，不是公开下载地址；请勿把上述 v0.4.5 正式版 URL 当作预览包。正式版升级后重启 DSH；工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场更新有独立审核周期；公开正式版以 v0.4.5 GitHub Release 安装包为准。
+**本地预览版（v0.4.6-preview.2）：**本分支的 `artifacts/dsh-nav-fold-0.4.6-preview.2.tgz` 仅供独立匿名宿主后续验收，未公开发布、未通过 preview.2 真实 GUI 或跨设备验收，不是公开下载地址。旧的 preview.1 包已被真实 GUI 失败反证，只保留作诊断证据，不得安装交付；请勿把上述 v0.4.5 正式版 URL 当作预览包。正式版升级后重启 DSH；工作区三栏依旧**默认关闭**，按下文在插件配置中主动保存开启。市场更新有独立审核周期；公开正式版以 v0.4.5 GitHub Release 安装包为准。
 
 ## 交互，刚好够用
 
