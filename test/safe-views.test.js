@@ -160,6 +160,54 @@ test('actual scoped Gb peer suspends Activity through two Bot-Agent cycles witho
   } finally { app.dispose(); }
 });
 
+test('wrong explicit native slot name during scoped Gb peer suspension hard-quarantines on departure', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    const peer = app.slots.addPeer('Gb', -101); await flush();
+    assert.equal(app.entries.length, 2);
+    assert.ok(app.entries.includes(peer));
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.deepEqual(writes, []);
+    app.entries[0].options.name = 'wrong-slot';
+    app.slots.removePeer('Gb'); await flush();
+    assert.deepEqual(writes, [['workspaceViewsEnabled', false]]);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.deepEqual(app.entries.map(entry => entry.registrant), ['Gb'], 'no own slot override remains');
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
+    app.form.publish(true); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null, 'ready(true) alone cannot rearm hard quarantine');
+    assert.deepEqual(app.entries.map(entry => entry.registrant), ['Gb']);
+  } finally { app.dispose(); }
+});
+
+test('wrong explicit own slot name during scoped registration hard-quarantines', async () => {
+  const app = mount({ active: true, rawScoped: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push([field, value]); return set(field, value); };
+  const register = app.slots.register.bind(app.slots);
+  app.slots.register = (options, component) => {
+    const unregister = register(options, component);
+    if (options.registrant === 'dsh-nav-fold:workspace-views') {
+      app.entries.find(entry => entry.registrant === options.registrant).options.name = 'wrong-slot';
+    }
+    return unregister;
+  };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click(); await flush();
+    assert.deepEqual(writes, [['workspaceViewsEnabled', false]]);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.deepEqual(app.entries.map(entry => entry.registrant), ['Gb']);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
+  } finally { app.dispose(); }
+});
+
 test('actual scoped Gb peer suspends Workspace without saving off', async () => {
   const app = mount({ active: true, rawScoped: true });
   const writes = [];
