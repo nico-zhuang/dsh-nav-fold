@@ -13,10 +13,11 @@ const html = `<div class="kB3qhq_root"><nav class="_3WPZCG_panelList" aria-label
 const native = () => ({ options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' } } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, uiWorkspace = {} } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, mode = 'workspace', uiWorkspace = {} } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
+  if (mode !== 'workspace') dom.window.localStorage.setItem('dsh-nav-fold:workspace-mode', mode);
   const listeners = new Set();
   const form = {
     snapshot: { status, value: { workspaceViewsEnabled: active }, writable: true, revision: 1 },
@@ -38,6 +39,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     subscribe(name, callback) { if (name === 'sidebar.workspaces') changes.add(callback); return () => changes.delete(callback); },
     inject(_name, fn) { return fn(); },
     register(options, component) { const entry = { options: { name: options.name, priority: options.priority }, component, registrant: options.registrant, children: options.children, locale: options.locale }; if (options.name === 'plugins.bundle.config') settingsPages.set(options.key, component); if (options.name === 'sidebar.workspaces') { entries.push(entry); notify(); } return () => { settingsPages.delete(options.key); const index = entries.indexOf(entry); if (index >= 0) { entries.splice(index, 1); notify(); } }; },
+    addNative() { entries.push(native()); notify(); },
     addPeer(registrant = 'another-sidebar', priority = 50) { entries.push({ options: { name: 'sidebar.workspaces', priority }, registrant }); notify(); },
     removePeer(registrant = 'another-sidebar') { const index = entries.findIndex(entry => entry.registrant === registrant); if (index >= 0) { entries.splice(index, 1); notify(); } },
   };
@@ -162,6 +164,76 @@ test('synchronous slot notifications do not recursively register or unregister o
     app.slots.removePeer(); await flush();
     assert.equal(app.doc.querySelector('[data-view="favorites"]')?.getAttribute('aria-pressed'), 'true');
     assert.equal(app.entries.length, 2, 'native and own entry return');
+  } finally { app.dispose(); }
+});
+
+test('auto-resume never exposes controls while own registration loses native priority', async () => {
+  const app = mount({ active: true, syncCallbacks: true });
+  const writes = [];
+  const set = app.form.set.bind(app.form);
+  app.form.set = async (field, value) => { writes.push(value); return set(field, value); };
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    app.slots.addPeer(); await flush();
+    app.entries.find(entry => entry.registrant === 'Gb').options.priority = -200;
+    const observed = [];
+    app.slots.subscribe('sidebar.workspaces', () => {
+      if (app.entries.some(entry => entry.registrant === 'dsh-nav-fold:workspace-views')) {
+        observed.push(Boolean(app.doc.querySelector('[data-dsh-workspace-tabs-row]')));
+      }
+    });
+    app.slots.removePeer(); await flush();
+    assert.deepEqual(observed, [false], 'failed winner registration cannot show unverified controls');
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.entries.length, 1);
+    assert.deepEqual(writes, [false], 'genuine own override failure is hard quarantine');
+  } finally { app.dispose(); }
+});
+
+test('Workspace view remains suspended until every peer leaves', async () => {
+  const app = mount({ active: true, syncCallbacks: true });
+  const writes = [];
+  app.form.set = async (field, value) => { writes.push(value); return true; };
+  try {
+    assert.ok(app.doc.querySelector('[data-dsh-workspace-tabs-row]'));
+    app.slots.addPeer('peer-one'); await flush();
+    app.slots.addPeer('peer-two'); await flush();
+    app.slots.removePeer('peer-one'); await flush();
+    assert.equal(app.entries.length, 2);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.deepEqual(writes, []);
+    app.slots.removePeer('peer-two'); await flush();
+    assert.equal(app.entries.length, 1);
+    assert.ok(app.doc.querySelector('[data-dsh-workspace-tabs-row]'));
+    assert.deepEqual(writes, []);
+  } finally { app.dispose(); }
+});
+
+test('peer joining synchronously during own register keeps Activity suspended without saving off', async () => {
+  const app = mount({ active: true, syncCallbacks: true, peers: [{ options: { name: 'sidebar.workspaces' }, registrant: 'first' }], mode: 'activity' });
+  const writes = [];
+  app.form.set = async (field, value) => { writes.push(value); return true; };
+  try {
+    await flush();
+    let join = true;
+    const observed = [];
+    app.slots.subscribe('sidebar.workspaces', () => {
+      if (join && app.entries.some(entry => entry.registrant === 'dsh-nav-fold:workspace-views')) {
+        join = false;
+        observed.push(Boolean(app.doc.querySelector('[data-dsh-workspace-tabs-row]')));
+        app.slots.addPeer('second');
+      }
+    });
+    app.slots.removePeer('first'); await flush();
+    assert.equal(join, false, 'race was exercised');
+    assert.deepEqual(observed, [false]);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.deepEqual(writes, []);
+    app.slots.removePeer('second'); await flush();
+    assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
+    assert.deepEqual(writes, []);
   } finally { app.dispose(); }
 });
 
@@ -323,14 +395,69 @@ test('peer with corrupted native registration still hard-quarantines', async () 
   } finally { app.dispose(); }
 });
 
-test('missing native registration hard-quarantines instead of waiting to resume', async () => {
+test('temporarily empty native registration withdraws and resumes without persisting off', async () => {
   const app = mount({ active: true, nativePresent: false });
+  const writes = [];
+  app.form.set = async (field, value) => { writes.push([field, value]); return true; };
   try {
     await flush();
-    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     assert.equal(app.entries.length, 0);
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.deepEqual(writes, []);
+    app.slots.addNative(); await flush();
+    assert.equal(app.doc.querySelectorAll('[data-dsh-workspace-tabs] [data-view]').length, 3);
+    assert.deepEqual(writes, []);
   } finally { app.dispose(); }
+});
+
+test('temporary region or footer loss withdraws Activity without saving off and restores after host recovery', async () => {
+  for (const selector of ['.kB3qhq_regionArea', '.kB3qhq_footArea']) {
+    const app = mount({ active: true });
+    const writes = [];
+    app.form.set = async (field, value) => { writes.push([field, value]); return true; };
+    try {
+      app.doc.querySelector('[data-view="activity"]').click();
+      const missing = app.doc.querySelector(selector);
+      missing.remove(); await flush();
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+      assert.equal(app.entries.length, 1);
+      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+      assert.deepEqual(writes, []);
+      const root = app.doc.querySelector('.kB3qhq_root');
+      if (selector === '.kB3qhq_regionArea') root.insertBefore(missing, root.querySelector('.kB3qhq_footArea'));
+      else root.append(missing);
+      await flush();
+      assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+      assert.equal(app.entries.length, 2);
+      assert.deepEqual(writes, []);
+    } finally { app.dispose(); }
+  }
+});
+
+test('moved intact bar with a peer is hard-quarantined, not peer-suspended', async () => {
+  const app = mount({ active: true });
+  try {
+    app.doc.querySelector('[data-view="activity"]').click();
+    const bar = app.doc.querySelector('[data-dsh-workspace-tabs-row]');
+    app.doc.querySelector('.kB3qhq_root').append(bar);
+    app.slots.addPeer(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.entries.length, 2);
+  } finally { app.dispose(); }
+});
+
+test('malformed peer entry cannot be classified as a reversible competitor', async () => {
+  for (const peer of [{ options: { name: 'wrong-slot' }, registrant: 'peer' }, { options: { name: 'sidebar.workspaces' } }]) {
+    const app = mount({ active: true });
+    try {
+      app.slots.addPeer(); await flush();
+      app.entries.push(peer); app.slots.removePeer(); await flush();
+      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    } finally { app.dispose(); }
+  }
 });
 
 test('peer spoofing native registrant beside the real native hard-quarantines', async () => {
