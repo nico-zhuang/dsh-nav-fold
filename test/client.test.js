@@ -12,7 +12,7 @@ const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 test('v0.4.7 preview bundle declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.7-preview.1', 'remote navigation must not reuse the published v0.4.6 version');
+  assert.equal(manifest.version, '0.4.7-preview.2', 'remote navigation must not reuse the published v0.4.6 version');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
@@ -719,6 +719,9 @@ test('remote navigation registers one unbound shortcut and focuses without openi
     assert.match(doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent,
       /data-dsh-nav-fold-navigation[^}]*data-row-key\^=[^}]*:focus[^}]*outline/, 'native focused session has visible candidate ring');
     key('ArrowDown'); assert.equal(doc.activeElement, second); assert.deepEqual(opened, []);
+    second.addEventListener('keydown', (event) => event.stopPropagation());
+    key('ArrowUp'); assert.equal(doc.activeElement, first, 'native row cannot block active navigation by stopping bubble');
+    key('ArrowDown'); assert.equal(doc.activeElement, second);
     region.innerHTML = '<div data-row-key="session:first" role="treeitem">First</div><div data-row-key="session:second" role="treeitem">Second</div>';
     region.querySelector('[data-row-key="session:second"]').addEventListener('click', () => opened.push('native-second'));
     await flush();
