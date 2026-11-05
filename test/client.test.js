@@ -9,10 +9,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.6 bundle requests sidebar, session and workspace client modules', () => {
+test('v0.4.7 preview bundle declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
-  assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.6', 'formal release candidate archive must have the v0.4.6 package version');
+  assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
+  assert.equal(manifest.version, '0.4.7-preview.1', 'remote navigation must not reuse the published v0.4.6 version');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
@@ -33,13 +33,14 @@ function settingsForm(initial = false) {
 function slotFixture() {
   const entries = new Map();
   const listeners = new Map();
+  const injected = [];
   const native = { options: { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: {
     'sidebar.workspaces.session.menu.item': {}, 'sidebar.workspaces.session.row.action': {},
   } };
   let nativeEntries = [native];
   const notify = (name) => { for (const listener of listeners.get(name) || []) queueMicrotask(listener); };
   const slots = {
-    inject: (_name, fn) => fn(),
+    inject: (_name, fn) => { const cleanup = fn(); if (typeof cleanup === 'function') injected.push(cleanup); return cleanup; },
     register(spec, component) {
       assert.ok(['sidebar.workspaces', 'plugins.bundle.config'].includes(spec.name));
       entries.set(spec.name, { spec, component }); notify(spec.name);
@@ -50,7 +51,7 @@ function slotFixture() {
     spec(name) { return name === 'sidebar.workspaces' ? { kind: 'single', scope: 'root' } : undefined; },
     subscribe(name, listener) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(listener); return () => listeners.get(name).delete(listener); },
   };
-  return { entries, slots, replaceNative(value) { nativeEntries = value; notify('sidebar.workspaces'); } };
+  return { entries, slots, dispose() { for (const cleanup of injected.reverse()) cleanup(); }, replaceNative(value) { nativeEntries = value; notify('sidebar.workspaces'); } };
 }
 const configForms = (form) => ({ get: (id) => id === 'nav-fold' ? form : undefined });
 
@@ -689,4 +690,105 @@ test('Chinese nav label also matched without touching unrelated nav', () => {
   assert.equal(doc.querySelectorAll('[data-sidebar-nav-toggle]').length, 1);
   assert.equal(doc.querySelector('[aria-label="Local"]').hasAttribute('data-sidebar-nav-collapsed'), false);
   dispose();
+});
+
+function shortcutFixture() {
+  let command;
+  let released = false;
+  return { shortcuts: { register(value) { command = value; return () => { released = true; }; } },
+    get command() { return command; }, get released() { return released; } };
+}
+
+test('remote navigation registers one unbound shortcut and focuses without opening', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const opened = [];
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession(id) { opened.push(id); } }, configForms: configForms(form) }));
+  const region = doc.querySelector('#workspaces');
+  region.innerHTML = '<div role="treeitem" data-row-key="workspace:w">Folder</div><div class="_sessionRow" data-row-key="session:first" role="treeitem" aria-selected="true">First</div><div class="_sessionRow" data-row-key="session:second" role="treeitem">Second</div>';
+  const [first, second] = [...region.querySelectorAll('[data-row-key^="session:"]')];
+  first.addEventListener('click', () => opened.push('native-first'));
+  second.addEventListener('click', () => opened.push('native-second'));
+  const key = (name, target = doc.activeElement) => target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+  try {
+    assert.equal(shortcut.command.id, 'dsh-nav-fold.session-navigation');
+    assert.equal(Object.keys(shortcut.command.defaults).length, 0, 'no shortcut steals a pre-existing key by default');
+    const action = shortcut.command.resolve({ region: 'page', modal: null, target: doc.body });
+    assert.equal(action.status, 'handled'); action.run();
+    assert.equal(doc.activeElement, first);
+    assert.match(doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent,
+      /data-dsh-nav-fold-navigation[^}]*data-row-key\^=[^}]*:focus[^}]*outline/, 'native focused session has visible candidate ring');
+    key('ArrowDown'); assert.equal(doc.activeElement, second); assert.deepEqual(opened, []);
+    region.innerHTML = '<div data-row-key="session:first" role="treeitem">First</div><div data-row-key="session:second" role="treeitem">Second</div>';
+    region.querySelector('[data-row-key="session:second"]').addEventListener('click', () => opened.push('native-second'));
+    await flush();
+    assert.equal(doc.activeElement.getAttribute('data-row-key'), 'session:second', 'rerender keeps the candidate session focused');
+    key('Enter'); assert.deepEqual(opened, ['native-second']);
+  } finally { fixture.dispose(); dispose(); }
+  assert.equal(shortcut.released, true);
+});
+
+test('remote arrows change tabs, focus custom rows, and exit without grabbing other inputs', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture(); const opened = [];
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession(id) { opened.push(id); } }, configForms: configForms(form) }));
+  const region = doc.querySelector('#workspaces');
+  region.innerHTML = '<div class="_sessionRow" data-row-key="session:native" role="treeitem">Native</div>';
+  const origin = doc.createElement('input'); doc.body.append(origin); origin.focus();
+  const key = (name, target = doc.activeElement) => target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+  try {
+    shortcut.command.resolve({ region: 'editable', modal: null, target: origin }).run();
+    key('ArrowRight'); assert.equal(doc.querySelector('[data-view="activity"]').getAttribute('aria-pressed'), 'true');
+    region.innerHTML = '<section data-dsh-workspace-view="activity"><button data-dsh-nav-fold-session-id="a">A</button><button data-dsh-nav-fold-session-id="b">B</button></section>';
+    await flush();
+    assert.equal(doc.activeElement.textContent, 'A');
+    key('ArrowDown'); assert.equal(doc.activeElement.textContent, 'B'); assert.deepEqual(opened, []);
+    key('Escape'); assert.equal(doc.activeElement, origin, 'Escape restores focus to the previous input');
+    shortcut.command.resolve({ region: 'editable', modal: null, target: origin }).run();
+    key('ArrowRight'); assert.equal(doc.querySelector('[data-view="favorites"]').getAttribute('aria-pressed'), 'true');
+    await flush();
+    assert.equal(doc.activeElement.dataset.view, 'favorites', 'old Activity row cannot receive focus as Favorites');
+    region.innerHTML = '<section data-dsh-workspace-view="favorites"><button data-dsh-nav-fold-session-id="fav">Pinned</button><input aria-label="Inline rename"></section>';
+    await flush(); assert.equal(doc.activeElement.textContent, 'Pinned');
+    const inlineEditor = region.querySelector('input'); inlineEditor.focus();
+    const inlineArrow = new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    inlineEditor.dispatchEvent(inlineArrow); assert.equal(inlineArrow.defaultPrevented, false, 'editing inside the sidebar keeps native arrow behavior');
+    shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
+    key('Enter'); assert.deepEqual(opened, ['fav']);
+    const input = doc.createElement('input'); doc.body.append(input); input.focus();
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true });
+    input.dispatchEvent(event); assert.equal(event.defaultPrevented, false);
+    assert.equal(shortcut.command.resolve({ region: 'editable', modal: 'other', target: input }).status, 'pass');
+  } finally { fixture.dispose(); dispose(); }
+});
+
+test('entry expands the narrow sidebar before focusing a session row', () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    layout: { toggleSidebar() { doc.querySelector('.kB3qhq_root').classList.remove('kB3qhq_collapsed'); } },
+    sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  try {
+    const root = doc.querySelector('.kB3qhq_root'); root.classList.add('kB3qhq_collapsed');
+    doc.querySelector('#workspaces').innerHTML = '<div class="_sessionRow" data-row-key="session:native" role="treeitem">Native</div>';
+    shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
+    assert.equal(root.classList.contains('kB3qhq_collapsed'), false);
+    assert.equal(doc.activeElement.textContent, 'Native');
+  } finally { fixture.dispose(); dispose(); }
+});
+
+test('DS-Bot peer suspension releases navigation without changing saved opt-in', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession() { assert.fail('should not open session'); } }, configForms: configForms(form) }));
+  try {
+    doc.querySelector('#workspaces').innerHTML = '<div class="_sessionRow" data-row-key="session:native" role="treeitem">Native</div>';
+    shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
+    fixture.replaceNative([...fixture.slots.entries('sidebar.workspaces'), { registrant: 'Gb', locale: 'bot', options: { name: 'sidebar.workspaces' } }]);
+    await flush();
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    doc.activeElement.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, false);
+    assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'pass');
+    assert.equal(form.getSnapshot().value.workspaceViewsEnabled, true);
+  } finally { fixture.dispose(); dispose(); }
 });
