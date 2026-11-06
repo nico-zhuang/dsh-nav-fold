@@ -30,7 +30,7 @@ test('hideBrandEnabled is an independent default-off persisted setting', () => {
 
 test('package declares the official schema peer and settings client modules', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '0.4.7-preview.5');
+  assert.equal(manifest.version, '0.4.7-preview.6');
   assert.equal(manifest.peerDependencies['@deepseek-ai/schemastery'], '~3.18.5');
   assert.match(manifest.description, /stoner-byte.*dsh-hide-brand/, 'plugin listing credits the integrated colleague implementation');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');

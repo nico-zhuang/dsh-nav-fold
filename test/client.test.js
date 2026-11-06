@@ -12,7 +12,7 @@ const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 test('v0.4.7 preview bundle declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.7-preview.5', 'folder navigation must not reuse the installed preview.4');
+  assert.equal(manifest.version, '0.4.7-preview.6', 'settings and credited brand integration must not reuse installed preview.5');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
@@ -114,15 +114,17 @@ test('saved brand setting owns a macOS-only style independently of workspace vie
   const form = settingsForm(false);
   const html = `<div data-platform="darwin">${workspaceSidebar().replace('<nav', '<div class="kB3qhq_logoRow">Brand</div><nav')}</div>`;
   const { doc, dom, dispose } = start(html, undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
-  const ownedStyle = () => doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]');
+  const ownedStyle = () => doc.querySelector('style[data-plugin="dsh-nav-fold"][data-plugin-css="dsh-nav-fold/hide-brand"]');
   const foreignStyle = doc.createElement('style'); foreignStyle.dataset.pluginCss = 'dsh-hide-brand/logo-row'; doc.head.append(foreignStyle);
+  const collidingStyle = doc.createElement('style'); collidingStyle.dataset.pluginCss = 'dsh-nav-fold/hide-brand';
+  collidingStyle.dataset.plugin = 'another-context'; doc.head.append(collidingStyle);
   const selector = '[data-platform="darwin"] .kB3qhq_root > [class*="logoRow"]';
   try {
     assert.equal(ownedStyle(), null, 'default-off setting leaves the native brand visible');
     assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'workspace views remain independently disabled');
     await form.set('hideBrandEnabled', true);
     await form.set('hideBrandEnabled', true);
-    assert.equal(doc.querySelectorAll('style[data-plugin-css="dsh-nav-fold/hide-brand"]').length, 1, 'repeated on never duplicates Fold-owned style');
+    assert.equal(doc.querySelectorAll('style[data-plugin="dsh-nav-fold"][data-plugin-css="dsh-nav-fold/hide-brand"]').length, 1, 'repeated on never duplicates Fold-owned style');
     assert.match(ownedStyle()?.textContent || '', /display:\s*none\s*!important/);
     assert.match(ownedStyle().textContent, /\[data-platform="darwin"\]/);
     assert.equal(doc.querySelectorAll(selector).length, 1, 'macOS brand row is the only matching target');
@@ -135,6 +137,7 @@ test('saved brand setting owns a macOS-only style independently of workspace vie
     await form.set('hideBrandEnabled', false);
     assert.equal(ownedStyle(), null, 'saving off restores the brand');
     assert.equal(foreignStyle.isConnected, true, 'Fold never removes another plugin style');
+    assert.equal(collidingStyle.isConnected, true, 'even a matching CSS key does not confer ownership');
     form.acceptBrand(true);
     assert.ok(ownedStyle());
   } finally { dispose(); dom.window.close(); }
