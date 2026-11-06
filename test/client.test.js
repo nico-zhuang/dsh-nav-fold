@@ -187,7 +187,7 @@ test('accepted three views keep native workspace slot until alternate selected a
     assert.match(css, /prefers-reduced-motion: reduce[^}]*data-dsh-workspace-tabs[^}]*transition:\s*none/s, 'reduced motion removes tab travel');
     assert.match(css, /kB3qhq_root\.kB3qhq_collapsed[^}]*data-dsh-workspace-tabs-row[^}]*display:\s*none/, 'native rail hides the owned tabs row rather than squeezing the three-tab switch');
     assert.equal(tabs.parentElement.nextElementSibling.id, 'workspaces');
-    assert.equal(tabs.nextElementSibling?.dataset.dshWorkspaceTabsToggle, '', 'outer-right fold button remains outside the three equal tab cells');
+    assert.equal(tabs.nextElementSibling, null, 'no tab-specific hide control follows the three equal tab cells');
     assert.deepEqual([...tabs.querySelectorAll('button')].map(button => button.dataset.view), ['workspace', 'activity', 'favorites']);
     assert.equal(tabs.children.length, 3, 'no decorative child may push the third grid tab onto a second row');
     assert.equal(entries.has('sidebar.workspaces'), false, 'Workspaces remains native');

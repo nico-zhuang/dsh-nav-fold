@@ -356,7 +356,7 @@ test('failed automatic disable and form loading cannot silently rearm a quaranti
   const app = mount({ active: true });
   try {
     app.form.set = async () => false;
-    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs]').remove(); await flush();
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true, 'failed disable leaves saved state unchanged');
     app.form.setStatus('loading');
@@ -399,7 +399,7 @@ test('after structural damage only settings off-to-on Save can rearm a now-safe 
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
   try {
-    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs]').remove(); await flush();
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     const host = app.doc.createElement('div'); app.doc.body.append(host);
     await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
@@ -422,7 +422,7 @@ test('a concurrent ready(true) cannot release quarantine while settings Save is 
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
   try {
-    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove(); await flush();
+    app.doc.querySelector('[data-dsh-workspace-tabs]').remove(); await flush();
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     const host = app.doc.createElement('div'); app.doc.body.append(host);
     await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
@@ -457,7 +457,7 @@ test('peer arriving with damaged owned DOM hard-quarantines instead of suspendin
   const app = mount({ active: true });
   try {
     app.doc.querySelector('[data-view="activity"]').click();
-    app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').remove();
+    app.doc.querySelector('[data-dsh-workspace-tabs]').remove();
     app.slots.addPeer('ds-bot-client', -101); await flush();
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     assert.deepEqual(app.entries.map(entry => entry.registrant).sort(), ['Gb', 'ds-bot-client'].sort());
@@ -608,80 +608,75 @@ test('approved framed tab is icon-only with accessible names', async () => {
   } finally { app.dispose(); }
 });
 
-test('outer fold control preserves Activity selection, native slot, and a quiet current-mode marker', async () => {
+test('one-child tabs remain visible while selecting Activity and preserve native slot', async () => {
   const app = mount({ active: true });
   try {
     await flush();
     const row = app.doc.querySelector('[data-dsh-workspace-tabs-row]');
-    const toggle = app.doc.querySelector('[data-dsh-workspace-tabs-toggle]');
-    assert.ok(row && toggle, 'one owned row with a separate outer control');
-    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(app.doc.querySelectorAll('[data-dsh-workspace-tabs] button[data-view]').length, 3);
+    const tabs = app.doc.querySelector('[data-dsh-workspace-tabs]');
+    assert.equal(row.children.length, 1);
+    assert.equal(row.firstElementChild, tabs);
+    assert.equal(tabs.hidden, false);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null);
+    assert.equal(tabs.querySelectorAll('button[data-view]').length, 3);
     app.doc.querySelector('[data-view="activity"]').click();
-    const ownEntry = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views');
-    toggle.click();
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(row.dataset.collapsed, 'true');
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]').hidden, true);
-    assert.match(toggle.getAttribute('aria-label'), /活动.*展开/);
-    assert.ok(toggle.querySelector('svg[data-current-view="activity"]'));
-    assert.equal(app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views'), ownEntry);
-    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
-    assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:workspace-tabs-collapsed'), 'true');
-    toggle.click();
-    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]').hidden, false);
+    assert.equal(tabs.hidden, false);
     assert.equal(app.doc.querySelector('[data-view="activity"]').getAttribute('aria-pressed'), 'true');
-    assert.equal(app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views'), ownEntry);
+    assert.equal(app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views')?.component !== undefined, true);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
   } finally { app.dispose(); }
 });
 
-test('saved folded preference is visual only and disappearing feature removes its fold control', async () => {
+test('legacy folded preference is ignored without clearing or rewriting storage', async () => {
   const app = mount({ active: true, folded: true });
   try {
     await flush();
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]').hidden, true);
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-toggle]').getAttribute('aria-expanded'), 'false');
+    const key = 'dsh-nav-fold:workspace-tabs-collapsed';
+    const tabs = app.doc.querySelector('[data-dsh-workspace-tabs]');
+    assert.equal(tabs.hidden, false);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null);
+    app.doc.querySelector('[data-view="favorites"]').click();
+    assert.equal(tabs.hidden, false);
+    assert.equal(app.dom.window.localStorage.getItem(key), 'true');
     app.form.publish(false); await flush();
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null);
     assert.equal(app.entries.length, 1);
     app.form.publish(true); await flush();
-    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]').hidden, true);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]').hidden, false);
+    assert.equal(app.dom.window.localStorage.getItem(key), 'true');
     app.slots.addPeer(); await flush();
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
     assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
   } finally { app.dispose(); }
 });
 
-test('host removing either owned row child quarantines alternate view instead of leaving an invisible override', async () => {
-  for (const selector of ['[data-dsh-workspace-tabs]', '[data-dsh-workspace-tabs-toggle]']) {
-    const app = mount({ active: true });
-    try {
-      await flush(); app.doc.querySelector('[data-view="activity"]').click();
-      app.doc.querySelector(selector).remove(); await flush();
-      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
-      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
-      assert.equal(app.entries.length, 1, 'own singleton override removed');
-      assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
-    } finally { app.dispose(); }
-  }
+test('legacy folded key is no longer referenced by the client', () => {
+  assert.doesNotMatch(source, /dsh-nav-fold:workspace-tabs-collapsed/);
 });
 
-test('expanded three-tab frame reserves equal left and right widths around the outer fold button', () => {
+test('host removing the sole owned tabs child quarantines alternate view instead of leaving an invisible override', async () => {
+  const app = mount({ active: true });
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    app.doc.querySelector('[data-dsh-workspace-tabs]').remove(); await flush();
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.entries.length, 1, 'own singleton override removed');
+    assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
+  } finally { app.dispose(); }
+});
+
+test('three-tab frame fills its single grid track within existing sidebar margins', () => {
   const css = source.match(/\[data-dsh-workspace-tabs-row\]\s*\{([^}]*)\}/)?.[1];
   assert.ok(css, 'plugin-owned layout row exists');
   assert.match(css, /display:\s*grid/);
-  const tracks = css.match(/grid-template-columns:\s*(\d+)px\s+minmax\(0,\s*1fr\)\s+(\d+)px/);
-  assert.ok(tracks, 'equal fixed outer grid tracks surround three equal tabs');
-  assert.equal(tracks[1], tracks[2], 'tab frame center aligns with sidebar center');
-  assert.equal(tracks[2], '28', 'outer track equals clickable fold-button width');
-  assert.match(css, /(?:column-)?gap:\s*4px/);
-  assert.match(source, /\[data-dsh-workspace-tabs-row\]::before\s*\{[^}]*content:\s*''/);
-  assert.match(source, /\[data-dsh-workspace-tabs-row\]\[data-collapsed="true"\]::before\s*\{[^}]*display:\s*none/);
+  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /margin:\s*6px\s+12px\s+8px/);
+  assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]::before/);
+  assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]\[data-collapsed/);
 });
 
-test('Pin B remains the lightly tilted Favorites glyph in both expanded and folded states', async () => {
+test('Pin B remains the lightly tilted Favorites glyph while selected', async () => {
   const app = mount({ active: true });
   try {
     await flush();
@@ -690,19 +685,15 @@ test('Pin B remains the lightly tilted Favorites glyph in both expanded and fold
     assert.equal(favorites.querySelector('svg g')?.getAttribute('transform'), 'rotate(-24 12 12)');
     assert.equal(favorites.querySelector('svg path')?.getAttribute('d'), path);
     favorites.click();
-    const toggle = app.doc.querySelector('[data-dsh-workspace-tabs-toggle]');
-    toggle.click();
     assert.equal(favorites.getAttribute('aria-pressed'), 'true');
-    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(toggle.querySelector('[data-current-view="favorites"] g')?.getAttribute('transform'), 'rotate(-24 12 12)');
-    assert.equal(toggle.querySelector('[data-current-view="favorites"] path')?.getAttribute('d'), path);
+    assert.equal(favorites.querySelector('svg path')?.getAttribute('d'), path);
   } finally { app.dispose(); }
 });
 
-test('small tab glyphs, discreet fold target, and reduced-motion support are scoped', async () => {
+test('small tab glyphs and reduced-motion support remain scoped', () => {
   assert.match(source, /\[data-dsh-workspace-tabs\] > button\[data-view\] svg\s*\{[^}]*width:\s*15px/);
-  assert.match(source, /\[data-dsh-workspace-tabs-toggle\]\s*\{[^}]*width:\s*28px/);
-  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*data-dsh-workspace-tabs-row/);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*\[data-dsh-workspace-tabs\]::before/);
+  assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-toggle\]/);
 });
 
 test('Activity shows native status dots only for explicit pending running and unread completion', async () => {
