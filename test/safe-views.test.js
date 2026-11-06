@@ -412,6 +412,8 @@ test('settings groups navigation and space with concise binding help and visible
     assert.ok(navigation && space, 'two purpose-based settings groups replace unrelated headings');
     assert.deepEqual([...navigation.querySelectorAll('[data-dsh-nav-fold-option]')].map((row) => row.dataset.dshNavFoldOption), ['views', 'session-navigation']);
     assert.deepEqual([...space.querySelectorAll('[data-dsh-nav-fold-option]')].map((row) => row.dataset.dshNavFoldOption), ['brand']);
+    assert.match(navigation.querySelector('[data-dsh-nav-fold-option="views"]').textContent, /待处理.*最近/,
+      'Activity description includes waiting and recent sessions, not just running ones');
     assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 3);
     assert.equal(host.querySelectorAll('button[type="button"]').length, 3, 'each persisted choice keeps its independent Save');
     const guide = navigation.querySelector('[data-dsh-nav-fold-guide]');
@@ -419,6 +421,7 @@ test('settings groups navigation and space with concise binding help and visible
     assert.equal(guide.querySelectorAll('li').length, 3);
     assert.match(guide.textContent, /DSH 设置.*快捷键.*会话导航/s);
     assert.match(guide.textContent, /无线麦.*小米蓝牙遥控器/s);
+    assert.match(navigation.textContent, /不直接连接蓝牙/);
     assert.match(navigation.textContent, /↑↓.*←→.*Enter.*Esc/s);
     const credit = space.querySelector('a[href="https://github.com/stoner-byte/dsh-hide-brand"]');
     assert.ok(credit, 'the included source is credited at its own switch');
