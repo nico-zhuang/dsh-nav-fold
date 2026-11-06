@@ -23,7 +23,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     snapshot: { status, value: { workspaceViewsEnabled: active, hideBrandEnabled: false }, writable: true, revision: 1 },
     getSnapshot() { return this.snapshot; },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled'].includes(field)); this.publishValue({ [field]: value }); return true; },
+    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled'].includes(field)); this.publishValue({ [field]: value }); return true; },
     publishValue(changes) { this.snapshot = { ...this.snapshot, status: 'ready', value: { ...this.snapshot.value, ...changes }, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
     publish(value) { this.publishValue({ workspaceViewsEnabled: value }); },
     setStatus(status) { this.snapshot = { ...this.snapshot, status, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
@@ -385,6 +385,44 @@ test('settings Save rejection keeps a retryable draft and explains the failure',
     assert.equal(host.querySelector('input').checked, true, 'failed Save leaves the draft available');
     assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
     assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('navigation setting guides shortcut mapping and independently preserves retryable draft', async () => {
+  const app = mount({ active: true });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document;
+  const previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
+    const navigation = host.querySelector('input[data-dsh-nav-fold-navigation-enabled]');
+    const save = host.querySelector('button[data-dsh-nav-fold-navigation-save]');
+    assert.ok(navigation && save, 'dedicated navigation switch and Save appear in the plugin settings');
+    assert.equal(navigation.checked, true, 'existing shortcut users are not disabled on upgrade');
+    assert.match(host.textContent, /DSH 设置.*快捷键.*会话导航/s);
+    assert.match(host.textContent, /无线麦/);
+    assert.match(host.textContent, /冲突/);
+    await React.act(async () => { navigation.click(); app.form.publishValue({ hideBrandEnabled: true }); });
+    assert.equal(navigation.checked, false, 'another setting does not discard the unsaved navigation draft');
+    const set = app.form.set.bind(app.form);
+    app.form.set = async () => false;
+    await React.act(async () => { save.click(); await flush(); });
+    assert.equal(navigation.checked, false);
+    assert.match(host.textContent, /导航设置未能保存/);
+    assert.equal(app.form.getSnapshot().value.navigationEnabled, undefined);
+    app.form.set = set;
+    await React.act(async () => { save.click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.navigationEnabled, false);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, true);
+    await React.act(async () => { app.form.publish(false); });
+    assert.match(host.textContent, /先.*三栏/, 'workspace views are an explicit prerequisite');
   } finally {
     if (root) await React.act(async () => root.unmount());
     globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;

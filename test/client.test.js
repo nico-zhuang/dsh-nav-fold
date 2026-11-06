@@ -28,8 +28,9 @@ function settingsForm(initial = false) {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     accept(value) { publish({ value: { workspaceViewsEnabled: value } }); },
     acceptBrand(value) { publish({ value: { hideBrandEnabled: value } }); },
+    acceptNavigation(value) { publish({ value: { navigationEnabled: value } }); },
     setStatus(status) { publish({ status }); },
-    async set(key, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled'].includes(key)); publish({ value: { [key]: value } }); return true; },
+    async set(key, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled'].includes(key)); publish({ value: { [key]: value } }); return true; },
   };
 }
 
@@ -725,10 +726,33 @@ test('Chinese nav label also matched without touching unrelated nav', () => {
 
 function shortcutFixture() {
   let command;
-  let released = false;
-  return { shortcuts: { register(value) { command = value; return () => { released = true; }; } },
-    get command() { return command; }, get released() { return released; } };
+  let released = false, registrations = 0, releases = 0;
+  return { shortcuts: { register(value) { command = value; registrations++; return () => { command = undefined; released = true; releases++; }; } },
+    get command() { return command; }, get released() { return released; }, get registrations() { return registrations; }, get releases() { return releases; } };
 }
+
+test('saved navigation switch releases active focus and shortcut without disabling workspace views', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  try {
+    doc.querySelector('#workspaces').innerHTML = '<div role="treeitem" data-row-key="session:current" aria-selected="true">Current</div>';
+    assert.equal(shortcut.registrations, 1, 'legacy saved workspace views keep navigation available');
+    assert.deepEqual(Object.keys(shortcut.command.defaults), [], 'no default key steals an existing binding');
+    shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
+    assert.ok(doc.querySelector('[data-dsh-nav-fold-navigation]'));
+    form.acceptNavigation(false);
+    assert.equal(doc.querySelector('[data-dsh-nav-fold-navigation]'), null);
+    assert.equal(shortcut.command, undefined, 'disabled navigation is unregistered');
+    assert.equal(shortcut.releases, 1);
+    assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'three workspace views remain enabled');
+    form.acceptNavigation(true);
+    assert.equal(shortcut.registrations, 2);
+    assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'handled');
+    form.accept(false);
+    assert.equal(shortcut.command, undefined, 'disabled workspace views also release navigation');
+  } finally { fixture.dispose(); dispose(); }
+});
 
 test('remote navigation registers one unbound shortcut and focuses without opening', async () => {
   const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();

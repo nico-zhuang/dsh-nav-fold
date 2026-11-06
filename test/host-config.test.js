@@ -13,6 +13,13 @@ test('workspaceViewsEnabled is volatile using official Schemastery metadata', as
   assert.equal(Config.dict.workspaceViewsEnabled.meta.default, false);
 });
 
+test('navigation switch defaults on without activating disabled workspace views', () => {
+  assert.equal(Config({}).navigationEnabled.get(), true);
+  assert.equal(Config({ navigationEnabled: false }).navigationEnabled.get(), false);
+  assert.equal(Config.dict.navigationEnabled.meta.volatile, true);
+  assert.equal(Config({}).workspaceViewsEnabled.get(), false);
+});
+
 test('hideBrandEnabled is an independent default-off persisted setting', () => {
   assert.equal(Config({}).hideBrandEnabled.get(), false);
   assert.equal(Config({ hideBrandEnabled: true }).hideBrandEnabled.get(), true);
