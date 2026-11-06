@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "DSH sidebar folding and customizable shortcut-driven focus navigation; workspace tabs and macOS logo hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
+  "description": "DSH sidebar folding, customizable shortcut-driven focus navigation and workspace tabs; macOS-only logo hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

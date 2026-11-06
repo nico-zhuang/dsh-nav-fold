@@ -32,6 +32,7 @@ test('package declares the official schema peer and settings client modules', ()
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version, '0.4.8');
   assert.match(manifest.description, /customizable shortcut.*focus navigation.*stoner-byte\/dsh-hide-brand/, 'plugin manager leads with its own navigation capability and credits the included implementation');
+  assert.doesNotMatch(manifest.description, /workspace tabs and macOS logo hiding adapted from/, 'upstream logo implementation must not be credited for our workspace tabs');
   assert.equal(manifest.peerDependencies['@deepseek-ai/schemastery'], '~3.18.5');
   assert.match(manifest.description, /stoner-byte.*dsh-hide-brand/, 'plugin listing credits the integrated colleague implementation');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');

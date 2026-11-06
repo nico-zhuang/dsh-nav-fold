@@ -427,6 +427,8 @@ test('settings groups navigation and space with concise binding help and visible
     assert.ok(credit, 'the included source is credited at its own switch');
     assert.match(space.textContent, /收录并适配.*stoner-byte.*dsh-hide-brand.*MIT/s);
     assert.match(space.textContent, /macOS/);
+    assert.match(space.textContent, /关闭仅移除 Fold 自身的隐藏样式/);
+    assert.doesNotMatch(space.textContent, /关闭后恢复 DSH 原有品牌行/);
   } finally {
     if (root) await React.act(async () => root.unmount());
     globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
