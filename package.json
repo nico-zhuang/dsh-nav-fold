@@ -1,10 +1,10 @@
 {
   "name": "dsh-nav-fold",
-  "version": "0.4.7-preview.6",
+  "version": "0.4.7",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Fold navigation and workspace views for DeepSeek Harness; macOS brand-row hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
+  "description": "DSH sidebar folding, shortcut-mapped Xiaomi Bluetooth remote navigation and workspace tabs; macOS logo hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
