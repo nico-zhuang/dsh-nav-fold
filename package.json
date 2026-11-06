@@ -4,7 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Minimal, fluid global navigation folding for DeepSeek Harness",
+  "description": "Fold navigation and workspace views for DeepSeek Harness; macOS brand-row hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",

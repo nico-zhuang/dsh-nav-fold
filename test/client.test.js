@@ -115,11 +115,14 @@ test('saved brand setting owns a macOS-only style independently of workspace vie
   const html = `<div data-platform="darwin">${workspaceSidebar().replace('<nav', '<div class="kB3qhq_logoRow">Brand</div><nav')}</div>`;
   const { doc, dom, dispose } = start(html, undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
   const ownedStyle = () => doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]');
+  const foreignStyle = doc.createElement('style'); foreignStyle.dataset.pluginCss = 'dsh-hide-brand/logo-row'; doc.head.append(foreignStyle);
   const selector = '[data-platform="darwin"] .kB3qhq_root > [class*="logoRow"]';
   try {
     assert.equal(ownedStyle(), null, 'default-off setting leaves the native brand visible');
     assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'workspace views remain independently disabled');
     await form.set('hideBrandEnabled', true);
+    await form.set('hideBrandEnabled', true);
+    assert.equal(doc.querySelectorAll('style[data-plugin-css="dsh-nav-fold/hide-brand"]').length, 1, 'repeated on never duplicates Fold-owned style');
     assert.match(ownedStyle()?.textContent || '', /display:\s*none\s*!important/);
     assert.match(ownedStyle().textContent, /\[data-platform="darwin"\]/);
     assert.equal(doc.querySelectorAll(selector).length, 1, 'macOS brand row is the only matching target');
@@ -131,6 +134,7 @@ test('saved brand setting owns a macOS-only style independently of workspace vie
     assert.ok(ownedStyle(), 'a ready saved setting restores the style');
     await form.set('hideBrandEnabled', false);
     assert.equal(ownedStyle(), null, 'saving off restores the brand');
+    assert.equal(foreignStyle.isConnected, true, 'Fold never removes another plugin style');
     form.acceptBrand(true);
     assert.ok(ownedStyle());
   } finally { dispose(); dom.window.close(); }
