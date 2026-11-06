@@ -23,7 +23,7 @@ test('hideBrandEnabled is an independent default-off persisted setting', () => {
 
 test('package declares the official schema peer and settings client modules', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '0.4.7-preview.4');
+  assert.equal(manifest.version, '0.4.7-preview.5');
   assert.equal(manifest.peerDependencies['@deepseek-ai/schemastery'], '~3.18.5');
   assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-plugin-manager'));
   assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'));
