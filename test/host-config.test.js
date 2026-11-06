@@ -30,18 +30,19 @@ test('hideBrandEnabled is an independent default-off persisted setting', () => {
 
 test('package declares the official schema peer and settings client modules', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '0.4.8');
+  assert.equal(manifest.version, '0.4.9');
   assert.match(manifest.description, /customizable shortcut.*focus navigation.*stoner-byte\/dsh-hide-brand/, 'plugin manager leads with its own navigation capability and credits the included implementation');
   assert.doesNotMatch(manifest.description, /workspace tabs and macOS logo hiding adapted from/, 'upstream logo implementation must not be credited for our workspace tabs');
   assert.equal(manifest.peerDependencies['@deepseek-ai/schemastery'], '~3.18.5');
   assert.match(manifest.description, /stoner-byte.*dsh-hide-brand/, 'plugin listing credits the integrated colleague implementation');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   const notices = readFileSync(new URL('../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8');
-  assert.match(readme, /^# dsh-nav-fold · v0\.4\.8/m);
-  assert.match(readme, /releases\/download\/v0\.4\.8\/dsh-nav-fold-0\.4\.8\.tgz/);
+  assert.match(readme, /^# dsh-nav-fold · v0\.4\.9/m);
+  assert.match(readme, /releases\/download\/v0\.4\.9\/dsh-nav-fold-0\.4\.9\.tgz/);
+  assert.match(readme, /0\.2\.1-rc\.5.*0\.2\.2-rc\.1/s, 'name both tested DSH builds, without claiming every 0.2.1 variant');
   assert.match(readme, /自定义.*快捷键.*焦点/s);
   assert.match(readme, /无线麦.*小米蓝牙遥控器/s);
-  assert.match(readme, /上一公开版.*v0\.4\.7/s, 'keep the prior stable version available for rollback');
+  assert.match(readme, /上一公开版.*v0\.4\.8/s, 'keep the prior stable version available for rollback');
   assert.doesNotMatch(readme, /^### 开发中：0\.4\.8-preview/gm, 'current release features are not labelled preview');
   assert.match(readme, /收录并适配.*stoner-byte.*dsh-hide-brand/s);
   assert.match(notices, /stoner-byte.*dsh-hide-brand/s);

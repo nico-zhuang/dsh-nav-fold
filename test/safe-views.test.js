@@ -11,9 +11,17 @@ import { createRoot } from 'react-dom/client';
 const source = fs.readFileSync(fileURLToPath(new URL('../lib/client.js', import.meta.url)), 'utf8');
 const html = `<div class="kB3qhq_root"><nav class="_3WPZCG_panelList" aria-label="Global panels"><button class="_3WPZCG_panelRow" aria-label="Plugins"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">Plugins</span></button></nav><div class="kB3qhq_regionArea" id="workspaces">Native workspace tree</div><div class="kB3qhq_footArea"></div></div>`;
 const native = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.directoryFlow': { kind: 'list' }, 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' }, 'sidebar.session.row.leading': { kind: 'list' }, 'sidebar.session.row.hover': { kind: 'list' } } });
+// Installed DSH 0.2.2-rc.1: ui-workspace/lib/client.js:6050-6079; menu.item now belongs to contextMenu.content.
+const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 'sidebar.workspaces' }, registrant: 'tk', locale: 'workspace', children: {
+  'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+  'sidebar.workspaces.session.row.action': { kind: 'list', scope: 'root' },
+  'sidebar.session.row.leading': { kind: 'list', scope: 'root', inline: true },
+  'sidebar.session.row.trailing': { kind: 'list', scope: 'root', inline: true },
+  'sidebar.session.row.hover': { kind: 'list', scope: 'root' },
+} });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, folded = false, mode = 'workspace', uiWorkspace = {}, rawScoped = false } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, rawScoped = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
@@ -21,15 +29,17 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
   const listeners = new Set();
   const form = {
     snapshot: { status, value: { workspaceViewsEnabled: active, hideBrandEnabled: false }, writable: true, revision: 1 },
+    setCalls: [],
     getSnapshot() { return this.snapshot; },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled'].includes(field)); this.publishValue({ [field]: value }); return true; },
+    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled'].includes(field)); this.setCalls.push([field, value]); this.publishValue({ [field]: value }); return true; },
     publishValue(changes) { this.snapshot = { ...this.snapshot, status: 'ready', value: { ...this.snapshot.value, ...changes }, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
     publish(value) { this.publishValue({ workspaceViewsEnabled: value }); },
     setStatus(status) { this.snapshot = { ...this.snapshot, status, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
   };
   const nativeEntries = new Set();
-  const entries = [...(nativePresent ? [native(rawScoped)] : []), ...peers];
+  const nativeFactory = nativeBuild === 'rc1' ? nativeRc1 : native;
+  const entries = [...(nativePresent ? [nativeOverride || nativeFactory(rawScoped)] : []), ...peers];
   if (nativePresent) nativeEntries.add(entries[0]);
   const settingsPages = new Map();
   const changes = new Set();
@@ -42,7 +52,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     subscribe(name, callback) { if (name === 'sidebar.workspaces') changes.add(callback); return () => changes.delete(callback); },
     inject(_name, fn) { return fn(); },
     register(options, component) { const entry = { options: { ...(rawScoped && options.name === 'sidebar.workspaces' ? {} : { name: options.name }), priority: options.priority }, component, registrant: options.registrant, children: options.children, locale: options.locale }; if (options.name === 'plugins.bundle.config') settingsPages.set(options.key, component); if (options.name === 'sidebar.workspaces') { entries.push(entry); notify(); } return () => { settingsPages.delete(options.key); const index = entries.indexOf(entry); if (index >= 0) { entries.splice(index, 1); notify(); } }; },
-    addNative() { const entry = native(rawScoped); nativeEntries.add(entry); entries.push(entry); notify(); },
+    addNative() { const entry = nativeFactory(rawScoped); nativeEntries.add(entry); entries.push(entry); notify(); },
     addPeer(registrant = 'another-sidebar', priority = 50) { const entry = { options: { ...(rawScoped ? {} : { name: 'sidebar.workspaces' }), priority }, registrant }; entries.push(entry); notify(); return entry; },
     removePeer(registrant = 'another-sidebar') { const index = entries.findIndex(entry => entry.registrant === registrant && !nativeEntries.has(entry)); if (index >= 0) { entries.splice(index, 1); notify(); } },
   };
@@ -94,6 +104,66 @@ test('settings accepted on creates icon tab; accepted off restores native slot w
     assert.equal(app.entries.length, 1);
     assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
   } finally { app.dispose(); }
+});
+
+test('rc1 native shows three views and never saves them off during ordinary switching', async () => {
+  const app = mount({ active: true, nativeBuild: 'rc1' });
+  try {
+    await flush();
+    assert.deepEqual([...app.doc.querySelectorAll('[data-dsh-workspace-tabs] button[data-view]')].map(node => node.dataset.view), ['workspace', 'activity', 'favorites']);
+    assert.deepEqual(app.form.setCalls, []);
+    for (const view of ['activity', 'favorites']) {
+      app.doc.querySelector(`[data-view="${view}"]`).click();
+      await flush();
+      assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
+      assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    }
+    app.doc.querySelector('[data-view="workspace"]').click();
+    await flush();
+    assert.deepEqual(app.entries.map(entry => entry.registrant), ['tk']);
+    assert.deepEqual(app.form.setCalls, []);
+    app.form.publish(false); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    app.form.publish(true); await flush();
+    assert.equal(app.doc.querySelectorAll('[data-dsh-workspace-tabs] button[data-view]').length, 3);
+    assert.deepEqual(app.form.setCalls, []);
+  } finally { app.dispose(); }
+});
+
+test('rc1 peer suspends tabs without modifying saved opt-in and restores after leaving', async () => {
+  const app = mount({ active: true, nativeBuild: 'rc1' });
+  try {
+    const activity = app.doc.querySelector('[data-view="activity"]');
+    assert.ok(activity, 'recognized rc1 native exposes tabs before peer arrives');
+    activity.click();
+    app.slots.addPeer('peer-plugin', -101); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.deepEqual(app.form.setCalls, []);
+    app.slots.removePeer('peer-plugin'); await flush();
+    assert.equal(app.doc.querySelector('[data-view="activity"]')?.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(app.form.setCalls, []);
+  } finally { app.dispose(); }
+});
+
+test('rc1 malformed or augmented native children and lone tk imposter remain quarantined', async () => {
+  const malformed = nativeRc1();
+  delete malformed.children['sidebar.session.row.trailing'];
+  const augmented = nativeRc1();
+  augmented.children['sidebar.workspaces.unknown'] = { kind: 'list', scope: 'root' };
+  const wrongInline = nativeRc1();
+  wrongInline.children['sidebar.workspaces.directoryFlow'].inline = true;
+  for (const options of [{ active: true, nativeBuild: 'rc1', nativeOverride: malformed },
+    { active: true, nativeBuild: 'rc1', nativeOverride: augmented },
+    { active: true, nativeBuild: 'rc1', nativeOverride: wrongInline },
+    { active: true, nativePresent: false, peers: [{ options: { name: 'sidebar.workspaces' }, registrant: 'tk' }] }]) {
+    const app = mount(options);
+    try {
+      await flush();
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+      assert.deepEqual(app.form.setCalls, [['workspaceViewsEnabled', false]]);
+    } finally { app.dispose(); }
+  }
 });
 
 test('pre-existing competing occupant suspends and restores the saved workspace view', async () => {

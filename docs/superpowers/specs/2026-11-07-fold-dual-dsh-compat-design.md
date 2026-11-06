@@ -1,0 +1,7 @@
+# dsh-nav-fold 双 DSH 版本兼容设计（v0.4.9）
+
+用户明确要求 **同时支持 DSH 0.2.1-rc.5 与 0.2.2-rc.1**，只处理三栏因宿主升级被误判为未知结构的回归。Fold v0.4.8 在 rc.5 上按原生工作区注册者 `Gb` 和 `sidebar.workspaces.session.menu.item` 子插槽识别，已安装 0.2.2-rc.1 的同一插槽注册者为 `tk`；新版原生 WorkspaceBrowser 改为自身声明 `directoryFlow`（single/root）、`session.row.action`（list/root）、`sidebar.session.row.leading` / `trailing`（list/root/inline）、`sidebar.session.row.hover`（list/root）；menu.item 移至独立的 `contextMenu.content`。证据：已安装 `@deepseek-ai/dsh-client-ui-workspace/lib/client.js` 6050–6091，Client Slots.inspect live root `sidebar.workspaces`，Fold `lib/client.js` 634–663。原生视图也可能因 Host config 默认为关闭而看不到三栏；双版测试必须明确以用户已保存开启为前提。
+
+采用**两个精确、互不兜底的已知宿主原生条目签名**：rc.5 保留原有 `Gb` + `locale=workspace` + menu.item 和 row.action；rc.1 限定 `tk` + `locale=workspace` + 上述新版 children（含准确 kind/scope/inline），并要求 menu.item 不归它声明。不能仅按 `registrant=tk` 放行，也不能放行任意声称 `workspace` 的第三方条目。保留 `kind=single/scope=root`、唯一原生条目、唯一 Fold 占位优先获胜和 slot/DOM 结构检查。其他插件真正占位时继续只在运行时让位，不能覆盖其注册；未知第三版保持安全退出，不能声称兼容所有 0.2.1 子版本。
+
+为 rc.5 原有 106 个行为测试保留旧原生 fixture；新增来自 0.2.2-rc.1 正式构建结构的 fixture，红灯测试覆盖 rc.1 显示三栏、切换活动/收藏、关闭恢复、peer 暂避与恢复、错误伪装者/损坏结构仍隔离，并确认不会因正常新原生结构自动 `form.set('workspaceViewsEnabled', false)`。用本机 rc.1 live Client Slots 和安装 receipt 核验新包加载、官方 Config/Slot 活跃；没有真实 DOM 浏览器连接时不得声称点击端到端测试。公开同名 Fold v0.4.9 到原仓库 main 和 GitHub Release，0.4.8 旧包不可覆盖，README 仅声明已覆盖 0.2.1-rc.5 和 0.2.2-rc.1，保留旧版回退及 stoner-byte 署名。深色选中态和快捷键后台直接录制另立课题，不混入这次兼容修复。
