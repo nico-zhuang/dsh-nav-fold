@@ -2,6 +2,8 @@
 
 The optional Workspaces / Activity / Favorites concept and the propagation of a running subagent to its parent session were informed by `@yiliang114/dsh-session-deck` 0.1.10. This plugin is a separate implementation tested against DSH 0.2.1-rc.5; it does not bundle Session Deck, use its rc.2 portal selector, or require that plugin to be installed.
 
+The optional macOS brand-row hiding behavior was informed by [stoner-byte/dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand) (package.json declares MIT; the repository does not include a standalone LICENSE file). Fold independently implements a platform-scoped CSS rule; it does not bundle or require that plugin or copy its source files.
+
 ## dsh-session-deck — MIT License
 
 Copyright (c) 2026 yiliang114

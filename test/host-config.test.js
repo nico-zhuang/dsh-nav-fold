@@ -13,9 +13,17 @@ test('workspaceViewsEnabled is volatile using official Schemastery metadata', as
   assert.equal(Config.dict.workspaceViewsEnabled.meta.default, false);
 });
 
+test('hideBrandEnabled is an independent default-off persisted setting', () => {
+  assert.equal(Config({}).hideBrandEnabled.get(), false);
+  assert.equal(Config({ hideBrandEnabled: true }).hideBrandEnabled.get(), true);
+  assert.equal(Config.dict.hideBrandEnabled.meta.volatile, true);
+  assert.equal(Config.dict.hideBrandEnabled.meta.default, false);
+  assert.equal(Config({ hideBrandEnabled: true }).workspaceViewsEnabled.get(), false);
+});
+
 test('package declares the official schema peer and settings client modules', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '0.4.7-preview.2');
+  assert.equal(manifest.version, '0.4.7-preview.4');
   assert.equal(manifest.peerDependencies['@deepseek-ai/schemastery'], '~3.18.5');
   assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-plugin-manager'));
   assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-settings'));

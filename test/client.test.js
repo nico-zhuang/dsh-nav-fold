@@ -12,7 +12,7 @@ const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 test('v0.4.7 preview bundle declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.7-preview.2', 'remote navigation must not reuse the published v0.4.6 version');
+  assert.equal(manifest.version, '0.4.7-preview.4', 'full-width tabs and brand toggle must not reuse the installed preview.2');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
@@ -20,13 +20,16 @@ const navigation = (name = 'Plugins') => `<nav class="_3WPZCG_panelList" aria-la
 const workspaceSidebar = () => `<div class="kB3qhq_root">${navigation().replace('<div id="workspaces">Workspace and sessions</div>', '<div class="kB3qhq_regionArea" id="workspaces">Workspace and sessions</div>')}<div class="kB3qhq_footArea"></div></div>`;
 
 function settingsForm(initial = false) {
-  let snapshot = { status: 'ready', writable: true, revision: 0, value: { workspaceViewsEnabled: initial } };
+  let snapshot = { status: 'ready', writable: true, revision: 0, value: { workspaceViewsEnabled: initial, hideBrandEnabled: false } };
   const listeners = new Set();
+  const publish = (patch) => { snapshot = { ...snapshot, ...patch, revision: snapshot.revision + 1, value: { ...snapshot.value, ...patch.value } }; for (const listener of listeners) listener(); };
   return {
     getSnapshot: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    accept(value) { snapshot = { ...snapshot, revision: snapshot.revision + 1, value: { workspaceViewsEnabled: value } }; for (const listener of listeners) listener(); },
-    async set(key, value) { assert.equal(key, 'workspaceViewsEnabled'); this.accept(value); return true; },
+    accept(value) { publish({ value: { workspaceViewsEnabled: value } }); },
+    acceptBrand(value) { publish({ value: { hideBrandEnabled: value } }); },
+    setStatus(status) { publish({ status }); },
+    async set(key, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled'].includes(key)); publish({ value: { [key]: value } }); return true; },
   };
 }
 
@@ -103,6 +106,34 @@ test('old localStorage opt-in is ignored; accepted setting mounts after DSH crea
     assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'accepted form opt-in appears when host sidebar mounts later');
     assert.equal(dom.window.localStorage.getItem('dsh-nav-fold:workspace-tabs'), 'on', 'obsolete setting is not rewritten');
   } finally { dispose(); }
+});
+
+test('saved brand setting owns a macOS-only style independently of workspace views and restores on dispose', async () => {
+  const { slots } = slotFixture();
+  const form = settingsForm(false);
+  const html = `<div data-platform="darwin">${workspaceSidebar().replace('<nav', '<div class="kB3qhq_logoRow">Brand</div><nav')}</div>`;
+  const { doc, dom, dispose } = start(html, undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  const ownedStyle = () => doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]');
+  const selector = '[data-platform="darwin"] .kB3qhq_root > [class*="logoRow"]';
+  try {
+    assert.equal(ownedStyle(), null, 'default-off setting leaves the native brand visible');
+    assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'workspace views remain independently disabled');
+    await form.set('hideBrandEnabled', true);
+    assert.match(ownedStyle()?.textContent || '', /display:\s*none\s*!important/);
+    assert.match(ownedStyle().textContent, /\[data-platform="darwin"\]/);
+    assert.equal(doc.querySelectorAll(selector).length, 1, 'macOS brand row is the only matching target');
+    doc.querySelector('[data-platform]').dataset.platform = 'win32';
+    assert.equal(doc.querySelectorAll(selector).length, 0, 'non-macOS interactive brand row is unaffected');
+    form.setStatus('loading');
+    assert.equal(ownedStyle(), null, 'unready configuration fails open to native branding');
+    form.setStatus('ready');
+    assert.ok(ownedStyle(), 'a ready saved setting restores the style');
+    await form.set('hideBrandEnabled', false);
+    assert.equal(ownedStyle(), null, 'saving off restores the brand');
+    form.acceptBrand(true);
+    assert.ok(ownedStyle());
+  } finally { dispose(); dom.window.close(); }
+  assert.equal(ownedStyle(), null, 'unloading Fold removes its own style');
 });
 
 test('host changing region class while Activity is open restores native slot', async () => {

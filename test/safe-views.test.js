@@ -20,11 +20,12 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
   if (mode !== 'workspace') dom.window.localStorage.setItem('dsh-nav-fold:workspace-mode', mode);
   const listeners = new Set();
   const form = {
-    snapshot: { status, value: { workspaceViewsEnabled: active }, writable: true, revision: 1 },
+    snapshot: { status, value: { workspaceViewsEnabled: active, hideBrandEnabled: false }, writable: true, revision: 1 },
     getSnapshot() { return this.snapshot; },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    async set(field, value) { assert.equal(field, 'workspaceViewsEnabled'); this.publish(value); return true; },
-    publish(value) { this.snapshot = { status: 'ready', value: { workspaceViewsEnabled: value }, writable: true, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
+    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled'].includes(field)); this.publishValue({ [field]: value }); return true; },
+    publishValue(changes) { this.snapshot = { ...this.snapshot, status: 'ready', value: { ...this.snapshot.value, ...changes }, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
+    publish(value) { this.publishValue({ workspaceViewsEnabled: value }); },
     setStatus(status) { this.snapshot = { ...this.snapshot, status, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
   };
   const nativeEntries = new Set();
@@ -391,6 +392,96 @@ test('settings Save rejection keeps a retryable draft and explains the failure',
   }
 });
 
+test('brand setting saves independently and a failed save keeps its retryable draft', async () => {
+  const app = mount();
+  const previousWindow = globalThis.window, previousDocument = globalThis.document;
+  const previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
+    const brandInput = host.querySelector('input[data-dsh-nav-fold-brand-enabled]');
+    const save = host.querySelector('button[data-dsh-nav-fold-brand-save]');
+    assert.ok(brandInput && save, 'brand checkbox and its own Save button are present');
+    assert.equal(brandInput.checked, false);
+    assert.equal(save.disabled, true);
+    await React.act(async () => { brandInput.click(); });
+    assert.equal(brandInput.checked, true);
+    await React.act(async () => { app.form.publishValue({ workspaceViewsEnabled: false }); });
+    assert.equal(brandInput.checked, true, 'unrelated workspace snapshot must not discard an unsaved brand draft');
+    assert.equal(save.disabled, false);
+    const originalSet = app.form.set.bind(app.form);
+    app.form.set = async () => false;
+    await React.act(async () => { save.click(); await flush(); });
+    assert.equal(brandInput.checked, true, 'failed save leaves the draft available');
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, false);
+    assert.match(host.textContent, /品牌设置未能保存/);
+    app.form.set = originalSet;
+    await React.act(async () => { save.click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, true);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false, 'brand is independent of workspace views');
+    assert.ok(app.doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]'));
+    await React.act(async () => { brandInput.click(); save.click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, false);
+    assert.equal(app.doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]'), null);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('saving either setting preserves the other unsaved draft in both orders', async () => {
+  const app = mount();
+  const previousWindow = globalThis.window, previousDocument = globalThis.document;
+  const previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
+    const workspace = host.querySelector('input:not([data-dsh-nav-fold-brand-enabled])');
+    const brand = host.querySelector('input[data-dsh-nav-fold-brand-enabled]');
+    const saveWorkspace = host.querySelector('button:not([data-dsh-nav-fold-brand-save])');
+    const saveBrand = host.querySelector('button[data-dsh-nav-fold-brand-save]');
+    await React.act(async () => { workspace.click(); brand.click(); });
+    await React.act(async () => { saveWorkspace.click(); await flush(); });
+    assert.equal(brand.checked, true, 'saving workspace does not reset brand draft');
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, false);
+    await React.act(async () => { saveBrand.click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.hideBrandEnabled, true);
+    await React.act(async () => { workspace.click(); brand.click(); });
+    await React.act(async () => { saveBrand.click(); await flush(); });
+    assert.equal(workspace.checked, false, 'saving brand does not reset workspace draft');
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    await React.act(async () => { saveWorkspace.click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, false);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('brand style remains independent while DS-Bot temporarily occupies the workspace slot', async () => {
+  const app = mount({ active: true });
+  const style = () => app.doc.querySelector('style[data-plugin-css="dsh-nav-fold/hide-brand"]');
+  try {
+    await app.form.set('hideBrandEnabled', true);
+    assert.ok(style());
+    app.slots.addPeer('ds-bot-client', -101); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+    assert.ok(style(), 'brand style is unrelated to temporary workspace suspension');
+    app.form.publish(false); await flush();
+    assert.ok(style(), 'switching workspace views off does not reset the brand choice');
+    app.slots.removePeer('ds-bot-client'); await flush();
+    assert.ok(style());
+  } finally { app.dispose(); }
+  assert.equal(style(), null, 'disposing the bundle removes the brand rule');
+});
+
 test('after structural damage only settings off-to-on Save can rearm a now-safe view', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window;
@@ -666,12 +757,12 @@ test('host removing the sole owned tabs child quarantines alternate view instead
   } finally { app.dispose(); }
 });
 
-test('three-tab frame fills its single grid track within existing sidebar margins', () => {
+test('three-tab frame fills the native sidebar content width without double padding', () => {
   const css = source.match(/\[data-dsh-workspace-tabs-row\]\s*\{([^}]*)\}/)?.[1];
   assert.ok(css, 'plugin-owned layout row exists');
   assert.match(css, /display:\s*grid/);
   assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-  assert.match(css, /margin:\s*6px\s+12px\s+8px/);
+  assert.match(css, /margin:\s*6px\s+0\s+8px/, 'sidebar root already contributes 12px horizontal padding');
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]::before/);
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]\[data-collapsed/);
 });
