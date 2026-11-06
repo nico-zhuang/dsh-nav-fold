@@ -762,6 +762,64 @@ test('remote navigation registers one unbound shortcut and focuses without openi
   assert.equal(shortcut.released, true);
 });
 
+test('remote workspace arrows visit native folders and Enter toggles their own tree without opening sessions', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture(); const opened = [];
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession(id) { opened.push(id); } }, configForms: configForms(form) }));
+  const region = doc.querySelector('#workspaces');
+  region.innerHTML = '<div role="treeitem" data-row-key="workspace:outer" aria-expanded="true">Outer</div><div role="group" id="outer-children"><div role="treeitem" data-row-key="workspace:inner" aria-expanded="false">Inner</div><div role="group" id="inner-children" hidden><div role="treeitem" data-row-key="session:hidden">Hidden</div></div><div role="treeitem" data-row-key="session:current" aria-selected="true">Current</div></div><div role="treeitem" data-row-key="session:other">Other</div>';
+  const outer = region.querySelector('[data-row-key="workspace:outer"]');
+  const inner = region.querySelector('[data-row-key="workspace:inner"]');
+  const current = region.querySelector('[data-row-key="session:current"]');
+  const hidden = region.querySelector('[data-row-key="session:hidden"]');
+  const other = region.querySelector('[data-row-key="session:other"]');
+  const toggle = (row, children) => row.addEventListener('click', () => { const expanded = row.getAttribute('aria-expanded') !== 'true'; row.setAttribute('aria-expanded', String(expanded)); children.hidden = !expanded; });
+  toggle(outer, region.querySelector('#outer-children')); toggle(inner, region.querySelector('#inner-children'));
+  hidden.addEventListener('click', () => opened.push('hidden-click'));
+  other.addEventListener('click', () => opened.push('other-click'));
+  const key = (name) => doc.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+  try {
+    shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
+    assert.equal(doc.activeElement, current, 'start still prefers the current session');
+    key('ArrowUp'); assert.equal(doc.activeElement, inner, 'nested folder is a real focus stop');
+    key('ArrowDown'); assert.equal(doc.activeElement, current, 'collapsed descendants are skipped');
+    key('ArrowUp'); key('ArrowUp'); assert.equal(doc.activeElement, outer);
+    key('Enter'); assert.equal(outer.getAttribute('aria-expanded'), 'false');
+    assert.equal(doc.activeElement, outer, 'folder retains focus after native toggle');
+    assert.ok(doc.querySelector('[data-dsh-nav-fold-navigation]'), 'folder Enter keeps navigation active');
+    key('ArrowDown'); assert.equal(doc.activeElement, other, 'hidden subtree is not traversed');
+    key('ArrowUp'); key('Enter'); assert.equal(outer.getAttribute('aria-expanded'), 'true');
+    key('ArrowDown'); assert.equal(doc.activeElement, inner);
+    key('Enter'); assert.equal(inner.getAttribute('aria-expanded'), 'true');
+    assert.equal(doc.activeElement, inner);
+    key('ArrowDown'); assert.equal(doc.activeElement, hidden, 'expanded nested descendants are traversed');
+    assert.deepEqual(opened, [], 'folder Enter does not open or create a session');
+    assert.match(doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent,
+      /data-dsh-nav-fold-navigation[^}]*data-row-key\^=[^}]*workspace:[^}]*:focus[^}]*outline/, 'folder receives the scoped keyboard focus outline');
+    key('ArrowDown'); key('ArrowDown'); assert.equal(doc.activeElement, other);
+    key('Enter'); assert.deepEqual(opened, ['other-click'], 'session Enter still opens exactly one session');
+    assert.equal(doc.querySelector('[data-dsh-nav-fold-navigation]'), null, 'session Enter exits navigation');
+  } finally { fixture.dispose(); dispose(); }
+});
+
+test('replaced native folder regains focus and Escape returns to entry focus', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  const region = doc.querySelector('#workspaces');
+  region.innerHTML = '<div role="treeitem" data-row-key="workspace:w" aria-expanded="false">Folder</div><div role="treeitem" data-row-key="session:current" aria-selected="true">Current</div>';
+  const entry = doc.createElement('button'); doc.body.append(entry); entry.focus();
+  const key = (name) => doc.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+  try {
+    shortcut.command.resolve({ region: 'page', modal: null, target: entry }).run();
+    key('ArrowUp'); assert.equal(doc.activeElement.dataset.rowKey, 'workspace:w');
+    region.querySelector('[data-row-key="workspace:w"]').outerHTML = '<div role="treeitem" data-row-key="workspace:w" aria-expanded="false">Remounted folder</div>';
+    await flush();
+    assert.equal(doc.activeElement, region.querySelector('[data-row-key="workspace:w"]'));
+    key('Escape'); assert.equal(doc.activeElement, entry);
+  } finally { fixture.dispose(); dispose(); }
+});
+
 test('remote arrows change tabs, focus custom rows, and exit without grabbing other inputs', async () => {
   const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture(); const opened = [];
   const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
