@@ -392,6 +392,45 @@ test('settings Save rejection keeps a retryable draft and explains the failure',
   }
 });
 
+test('settings layout stays scoped, uses host theme tokens and adapts at narrow widths', () => {
+  assert.match(source, /\[data-dsh-nav-fold-settings\] \[data-dsh-nav-fold-option\] \{[^}]*grid-template-columns/s);
+  assert.match(source, /\[data-dsh-nav-fold-settings\][^{}]*\{[^}]*var\(--dsw-alias-border-l1\)/s);
+  assert.match(source, /@media \(max-width: 540px\)[^{}]*\{[^}]*\[data-dsh-nav-fold-settings\]/s);
+});
+
+test('settings groups navigation and space with concise binding help and visible module credit', async () => {
+  const app = mount({ active: true });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document;
+  const previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(app.settingsPages.get('dsh-nav-fold'), { view: 'page' })); });
+    const navigation = host.querySelector('[data-dsh-nav-fold-group="navigation"]');
+    const space = host.querySelector('[data-dsh-nav-fold-group="space"]');
+    assert.ok(navigation && space, 'two purpose-based settings groups replace unrelated headings');
+    assert.deepEqual([...navigation.querySelectorAll('[data-dsh-nav-fold-option]')].map((row) => row.dataset.dshNavFoldOption), ['views', 'session-navigation']);
+    assert.deepEqual([...space.querySelectorAll('[data-dsh-nav-fold-option]')].map((row) => row.dataset.dshNavFoldOption), ['brand']);
+    assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 3);
+    assert.equal(host.querySelectorAll('button[type="button"]').length, 3, 'each persisted choice keeps its independent Save');
+    const guide = navigation.querySelector('[data-dsh-nav-fold-guide]');
+    assert.equal(guide?.tagName, 'OL', 'set up steps have a scannable order');
+    assert.equal(guide.querySelectorAll('li').length, 3);
+    assert.match(guide.textContent, /DSH 设置.*快捷键.*会话导航/s);
+    assert.match(guide.textContent, /无线麦.*小米蓝牙遥控器/s);
+    assert.match(navigation.textContent, /↑↓.*←→.*Enter.*Esc/s);
+    const credit = space.querySelector('a[href="https://github.com/stoner-byte/dsh-hide-brand"]');
+    assert.ok(credit, 'the included source is credited at its own switch');
+    assert.match(space.textContent, /收录并适配.*stoner-byte.*dsh-hide-brand.*MIT/s);
+    assert.match(space.textContent, /macOS/);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
 test('navigation setting guides shortcut mapping and independently preserves retryable draft', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window, previousDocument = globalThis.document;

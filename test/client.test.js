@@ -101,7 +101,7 @@ test('old localStorage opt-in is ignored; accepted setting mounts after DSH crea
     assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'obsolete localStorage setting cannot enable views');
     assert.equal(doc.querySelector('[data-dsh-workspace-tabs-toggle]'), null, 'workspace quick toggle was removed');
     assert.ok(entries.has('plugins.bundle.config'), 'settings page is registered in the official plugin config slot');
-    assert.match(renderToStaticMarkup(React.createElement(entries.get('plugins.bundle.config').component, { view: 'page' })), /Workspace views/);
+    assert.match(renderToStaticMarkup(React.createElement(entries.get('plugins.bundle.config').component, { view: 'page' })), /工作区／活动／收藏三栏/);
     form.accept(true);
     await flush();
     assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'accepted form opt-in appears when host sidebar mounts later');
