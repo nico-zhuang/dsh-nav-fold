@@ -18,7 +18,7 @@ DSH 0.2.1-rc.5 和0.2.2-rc.1均保持现有安全回退。仅在已经识别并�
 
 新会话：uiWorkspace公开startSession，但SidebarRoot内置按钮还涉及会话创建权限、快捷键提示和不同窗口/侧栏状态；操作可调用不等于按钮有可替换插槽，本轮不改。
 
-底部：live sidebar.footer.action已注册bot-return、agents-anywhere-next及cost-meter等。该插槽只保证传递wide，未保证每项提供icon/label/action的独立数据，因此不能把所有自定义React内容无损强制压成一行。推荐先研究自愿接入的图标入口契约、原按钮互斥显示、溢出菜单与未知插件回退，而不是反向嵌套或任意隐藏插件节点；数据摘要、账户菜单不得等同普通入口压缩。
+底部：live `sidebar.footer.action` 已注册 `bot-return`、`agents-anywhere-next` 及 cost-meter 等。该插槽只保证传递 `wide`，未保证每项提供 icon/label/action 的独立数据，因此不能把所有自定义 React 内容无损强制压成一行。已核对 DS Bot 的 `BotReturn` 和 Bridge 的 `ConnectionEntry`：两者实际上都在 `wide=false` 时仅呈现图标；Bridge 的入口还携带弹窗状态/提示，不能仅克隆图标或调用按钮事件代替其行为。推荐先研究自愿接入的图标入口契约、原按钮互斥显示、溢出菜单与未知插件回退，而不是反向嵌套或任意隐藏插件节点；数据摘要、账户菜单不得等同普通入口压缩。
 
 ## 验证与交付
 
