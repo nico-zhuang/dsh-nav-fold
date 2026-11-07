@@ -1176,6 +1176,38 @@ test('failed unpin leaves the favorite pressed and offers retry', async () => {
   }
 });
 
+test('native session menu reserves only one 24px ellipsis while legacy retains three controls', async () => {
+  const app = mount({ active: true, nativeBuild: 'rc1', contextMenus: {
+    open() {}, close() {}, active: { getSnapshot: () => null },
+  } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const props = { useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } }),
+      useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: [] }) };
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      ...props, useContextMenu: () => ({ getTriggerProps: () => ({}) }),
+    })); });
+    const row = host.querySelector('.dsh-nav-fold-session');
+    assert.equal(row.querySelectorAll('.dsh-nav-fold-session-actions button').length, 1);
+    assert.equal(row.querySelector('.dsh-nav-fold-session-actions button').hasAttribute('data-session-menu'), true);
+    assert.match(row.className, /dsh-nav-fold-session-native/);
+    assert.match(source, /\.dsh-nav-fold-session-native\s+\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*(?:2[4-9]|3[0-2])px/);
+    assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
+    await React.act(async () => { root.render(React.createElement(View, props)); });
+    assert.equal(host.querySelectorAll('.dsh-nav-fold-session-actions button').length, 3);
+    assert.doesNotMatch(host.querySelector('.dsh-nav-fold-session').className, /dsh-nav-fold-session-native/);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
 test('session actions reserve title space and reveal on hover, focus or touch', () => {
   assert.match(source, /\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*82px/);
   assert.match(source, /\.dsh-nav-fold-session:hover\s+\.dsh-nav-fold-session-actions,\s*\.dsh-nav-fold-session:focus-within\s+\.dsh-nav-fold-session-actions/);
