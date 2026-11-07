@@ -399,6 +399,25 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   dispose();
 });
 
+test('divider optics lift only collapsed visual contents while preserving the toggle hit region', () => {
+  const { doc, dispose } = start();
+  try {
+    const nav = doc.querySelector('nav');
+    const toggle = nav.querySelector('[data-sidebar-nav-toggle]');
+    const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+    const opticalRule = css.match(/nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed="true"\]\s*>\s*\[data-sidebar-nav-toggle\]::before,\s*nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed="true"\]\s*>\s*\[data-sidebar-nav-toggle\]::after,\s*nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed="true"\]\s+\[data-sidebar-toggle-center\]\s*\{([^}]*)\}/)?.[1];
+    // Screenshot pixels are 2× CSS pixels: -4px CSS shifts the visible mark about 8 screenshot pixels.
+    assert.match(opticalRule, /transform:\s*translateY\(-4px\)\s*;/);
+    assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*padding-bottom:\s*24px/);
+    assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*bottom:\s*0;[^}]*height:\s*24px/);
+    assert.doesNotMatch(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed="false"\][^{]*\{[^}]*translateY\(-4px\)/);
+    assert.equal(nav.dataset.sidebarNavCollapsed, 'true');
+    toggle.click();
+    assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  } finally { dispose(); }
+});
+
 test('compact Fold nav removes native spacing without shrinking its icon rows or arrow', () => {
   const { doc, dispose } = start();
   try {

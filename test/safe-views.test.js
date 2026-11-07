@@ -913,12 +913,14 @@ test('host removing the sole owned tabs child quarantines alternate view instead
   } finally { app.dispose(); }
 });
 
-test('compact Fold three-tab frame fills the native sidebar content width without double padding', () => {
+test('compact Fold three-tab frame matches native New Session width without double padding', () => {
   const css = source.match(/\[data-dsh-workspace-tabs-row\]\s*\{([^}]*)\}/)?.[1];
   assert.ok(css, 'plugin-owned layout row exists');
   assert.match(css, /display:\s*grid/);
   assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-  assert.match(css, /margin:\s*0\s+0\s+8px\s*;/, 'native nav margin is removed; own tab row adds no top or horizontal margin');
+  // Native rc.1 uses paint inset 3px + 1px = 4px; rc.5 has no variable, so fallback 1px + 1px = 2px.
+  // jsdom cannot resolve calc(var(...)) into computed layout, so assert the actual scoped CSS expression.
+  assert.match(css, /margin:\s*0\s+calc\(var\(--dsh-sidebar-paint-inset,\s*1px\)\s*\+\s*1px\)\s+8px\s*;/, 'tab track follows the native New Session horizontal inset and retains its bottom gap');
   assert.doesNotMatch(css, /padding(?:-inline|-left|-right)?\s*:/, 'sidebar root already contributes horizontal padding');
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]::before/);
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]\[data-collapsed/);
