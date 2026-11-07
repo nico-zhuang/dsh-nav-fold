@@ -1,4 +1,4 @@
-# dsh-nav-fold · v0.4.10
+# dsh-nav-fold · v0.4.11
 
 > 一个插件整理 DSH 左侧栏：收起全局导航、按需开启工作区三栏，并用自定义入口快捷键进入文件夹／会话焦点导航。也可通过「无线麦」映射小米蓝牙遥控器按键；Fold 不直接连接蓝牙设备。macOS 顶部 Logo 隐藏功能收录并适配 [stoner-byte 的 dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand)（MIT）。
 
@@ -12,13 +12,13 @@
 
 ## 安装与升级
 
-**v0.4.10 安装：**从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.10) 下载 `dsh-nav-fold-0.4.10.tgz`，或用 DSH CLI 安装：
+**v0.4.11 安装：**从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.11) 下载 `dsh-nav-fold-0.4.11.tgz`，或用 DSH CLI 安装：
 
 ```sh
-dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.10/dsh-nav-fold-0.4.10.tgz
+dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.11/dsh-nav-fold-0.4.11.tgz
 ```
 
-已针对 **DSH 0.2.1-rc.5 与 0.2.2-rc.1** 两个已发布构建分别核对原生侧栏结构并做自动化回归；不代表 0.2.1 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.9](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.9) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
+已针对 **DSH 0.2.1-rc.5 与 0.2.2-rc.1** 两个已发布构建分别核对原生侧栏结构并做自动化回归；不代表 0.2.1 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.10](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.10) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
 
 ## 左侧栏优化，按需开启
 
@@ -27,7 +27,7 @@ dsh plugin add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.
 - **浏览与导航**：开启并保存「工作区／活动／收藏三栏」，再确认「会话焦点导航」已开启。到 **DSH 设置 → 快捷键**，给「会话导航 / Navigate sessions」绑定入口组合键（无预设）。进入后 ↑↓移动焦点，←→切换三栏；Enter 展开文件夹或打开会话，Esc 退出。需要遥控器时，可在「无线麦」中把小米蓝牙遥控器的“进入列表”按键映射到同一组合键；Fold 不负责设备配对。
 - **空间整理**：可独立开启「隐藏顶部 Logo」（仅 macOS），不要求打开三栏。这项功能收录并适配 [stoner-byte 的 dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand)，许可与来源见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
-v0.4.10 在 rc.1 上把会话行三点操作交回 DSH 原生菜单，rc.5 保留旧版回退，不修改已保存偏好。已验证自动化行为测试；**新版菜单尚无已认证的真实 DSH GUI 点击验收，实体遥控器组合操作也未亲测**，不将源码或模拟测试称为现场验收。
+v0.4.11 让选中状态的 Tab 使用随深浅主题调整的更柔和填色，并去掉折叠导航中宿主 8px 与 Fold 自身 6px 的重复上下间距；不调整宿主「新会话」或底部操作入口。v0.4.10 在 rc.1 上把会话行三点操作交回 DSH 原生菜单，rc.5 保留旧版回退，不修改已保存偏好。已验证自动化行为测试；**新版菜单尚无已认证的真实 DSH GUI 点击验收，实体遥控器组合操作也未亲测**，不将源码或模拟测试称为现场验收。
 
 ## 交互，刚好够用
 

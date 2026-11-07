@@ -9,10 +9,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.10 release declares shortcuts and required client modules', () => {
+test('v0.4.11 release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.10', 'publish the same nav-fold package as its next stable version');
+  assert.equal(manifest.version, '0.4.11', 'publish a distinct patch version without replacing v0.4.10');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
 });
 const panel = (name) => `<button class="_3WPZCG_panelRow" aria-label="${name}"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">${name}</span></button>`;
