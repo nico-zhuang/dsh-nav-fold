@@ -1041,6 +1041,14 @@ test('native session menu hands Activity and Favorites actions to the host', asy
       assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 7, y: 9 }]);
       await React.act(async () => { row.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true })); });
       assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 0, y: 0 }]);
+      for (const event of [new app.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 7, clientY: 9 }),
+        new app.dom.window.KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true })]) {
+        const before = calls.filter(call => call[0] === 'open').length;
+        await React.act(async () => { dots.dispatchEvent(event); });
+        assert.equal(calls.filter(call => call[0] === 'open').length - before, 1, `${view} ellipsis ${event.type} opens exactly once`);
+        assert.equal(calls.some(call => call[0] === 'openSession'), false, 'menu gesture does not navigate');
+      }
+      assert.equal(dots.getAttribute('aria-haspopup'), 'menu');
       assert.equal(host.querySelector('[role="menu"], [data-session-pin], [data-session-archive], [role="dialog"]'), null);
       contextMenus.close();
     }
