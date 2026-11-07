@@ -913,14 +913,37 @@ test('host removing the sole owned tabs child quarantines alternate view instead
   } finally { app.dispose(); }
 });
 
-test('three-tab frame fills the native sidebar content width without double padding', () => {
+test('compact Fold three-tab frame fills the native sidebar content width without double padding', () => {
   const css = source.match(/\[data-dsh-workspace-tabs-row\]\s*\{([^}]*)\}/)?.[1];
   assert.ok(css, 'plugin-owned layout row exists');
   assert.match(css, /display:\s*grid/);
   assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-  assert.match(css, /margin:\s*6px\s+0\s+8px/, 'sidebar root already contributes 12px horizontal padding');
+  assert.match(css, /margin:\s*0\s+0\s+8px\s*;/, 'native nav margin is removed; own tab row adds no top or horizontal margin');
+  assert.doesNotMatch(css, /padding(?:-inline|-left|-right)?\s*:/, 'sidebar root already contributes horizontal padding');
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]::before/);
   assert.doesNotMatch(source, /\[data-dsh-workspace-tabs-row\]\[data-collapsed/);
+});
+
+test('quiet selected Tab keeps rendered glyphs, pressed state, and native cleanup', async () => {
+  const app = mount({ active: true });
+  try {
+    await flush();
+    const tabs = app.doc.querySelector('[data-dsh-workspace-tabs]');
+    assert.ok(tabs);
+    assert.equal(tabs.querySelectorAll('button[data-view] svg').length, 3);
+    assert.deepEqual([...tabs.querySelectorAll('button[data-view]')].map(button => button.getAttribute('aria-pressed')), ['true', 'false', 'false']);
+    tabs.querySelector('[data-view="favorites"]').click();
+    assert.deepEqual([...tabs.querySelectorAll('button[data-view]')].map(button => button.getAttribute('aria-pressed')), ['false', 'false', 'true']);
+    assert.ok(app.doc.querySelector('[data-dsh-workspace-tabs-row]'));
+    app.form.publish(false); await flush();
+    assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs-row]'), null);
+    assert.equal(app.doc.querySelector('#workspaces').textContent, 'Native workspace tree');
+  } finally { app.dispose(); }
+  const indicator = source.match(/\[data-dsh-workspace-tabs\]::before\s*\{([^}]*)\}/)?.[1];
+  assert.ok(indicator);
+  assert.match(indicator, /background:\s*color-mix\(in srgb,\s*var\(--dsw-alias-interactive-bg-hover,\s*rgba\(128,128,128,\.10\)\)\s+85%,\s*var\(--dsw-alias-label-primary,\s*currentColor\)\s+15%\)/);
+  assert.doesNotMatch(indicator, /--dsw-specific-sidebar-fill|box-shadow|background:\s*(?:#000|black)\b/);
+  assert.match(source, /\[data-dsh-workspace-tabs\] > button\[data-view\]:focus-visible\s*\{[^}]*outline:/);
 });
 
 test('Pin B remains the lightly tilted Favorites glyph while selected', async () => {

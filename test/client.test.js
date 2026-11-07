@@ -399,6 +399,23 @@ test('both states share a full-width slim bottom line with a legible SVG icon', 
   dispose();
 });
 
+test('compact Fold nav removes native spacing without shrinking its icon rows or arrow', () => {
+  const { doc, dispose } = start();
+  try {
+    const nav = doc.querySelector('nav');
+    const css = doc.querySelector('style[data-plugin-css="dsh-sidebar-nav-collapse"]').textContent;
+    const collapsed = css.match(/nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed="true"\]\s*\{([^}]*)\}/)?.[1];
+    assert.equal(nav.dataset.sidebarNavCollapsed, 'true');
+    assert.match(collapsed, /margin-bottom:\s*0(?:px)?\s*;/, 'override the 8px native margin shared by rc1 and rc5');
+    assert.match(collapsed, /grid-template-columns:\s*repeat\(auto-fit,\s*36px\)/, 'icons wrap without shifting column origins');
+    assert.match(css, /nav\[class\*="panelList"\]\[data-sidebar-nav-collapsed\][^{]*\{[^}]*padding-bottom:\s*24px/);
+    assert.match(css, /\[data-sidebar-nav-toggle\][^{]*\{[^}]*height:\s*24px/);
+    assert.match(css, /button\[class\*="panelRow"\][^{]*\{[^}]*width:\s*36px;\s*min-width:\s*36px/);
+    assert.equal(nav.querySelector('[data-sidebar-nav-toggle]').getAttribute('aria-expanded'), 'false');
+    assert.equal(nav.nextElementSibling.id, 'workspaces');
+  } finally { dispose(); }
+});
+
 test('startup never subscribes to ResizeObserver; native grid owns sidebar width', () => {
   let created = 0;
   const { doc, dispose } = start(navigation(), undefined, undefined, win => {
