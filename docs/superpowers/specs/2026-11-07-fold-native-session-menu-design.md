@@ -8,6 +8,7 @@ Fold 0.4.9 的活动／收藏会话行自己绘制菜单和置顶／归档按钮
 
 - DSH 0.2.2-rc.1 的 `@deepseek-ai/dsh-client-ui-context-menu` 公开 `ctx.contextMenus.open({ kind: 'session', value: { sessionId, displayTitle } }, point)`，`sidebar.workspaces` 的标准 props 注入 `useContextMenu()` 和 `getTriggerProps()`。原生会话菜单已经注册置顶、重命名、分叉、复制 ID、归档，附带权限门控与宿主确认流程。
 - npm 无 `@deepseek-ai/dsh-client-ui-context-menu@0.2.1-rc.5`。Fold 的 Client 注入列表不能增加该包为硬依赖；rc.5 保留现有可用的菜单和按钮，避免破坏已支持版本。
+- Cordis 对未声明 `inject` 的 `ctx.contextMenus` 属性读取会抛错；其公开 `ctx.get('contextMenus')` 可读取**已激活**的可选服务，不存在则返回 `undefined`。Fold 用此入口在 rc.1 获取宿主共享菜单，在 rc.5 安全回退，不把 rc.1 专有包加入硬依赖。
 - Workspace 视图继续用 DSH 原生工作区树，不修改其 slot 声明或安全隔离判定。
 
 ## 设计
