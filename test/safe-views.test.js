@@ -21,7 +21,7 @@ const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 's
 } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, rawScoped = false } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
@@ -75,7 +75,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     }
     : (() => { throw Error(`unexpected dependency ${id}`); })());
   const disposers = [];
-  client.apply({ effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); }, slots, sessions: {}, uiWorkspace, configForms: { get: () => form } });
+  client.apply({ effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); }, slots, sessions: {}, uiWorkspace, contextMenus, configForms: { get: () => form } });
   return { dom, doc: dom.window.document, slots, form, entries, settingsPages, dispose: () => { for (const fn of disposers.reverse()) fn(); dom.window.close(); } };
 }
 
@@ -997,6 +997,59 @@ test('running dot alone has a looping pulse and respects reduced motion', async 
     assert.match(source, /\.dsh-nav-fold-state-dot-running\s*\{[^}]*animation:[^}]*infinite/);
     assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.dsh-nav-fold-state-dot-running[^}]*animation:\s*none/);
   } finally { app.dispose(); }
+});
+
+test('native session menu hands Activity and Favorites actions to the host', async () => {
+  const calls = [];
+  let activeTarget = null;
+  const contextMenus = {
+    open(target, point) { calls.push(['open', target, point]); activeTarget = target; },
+    close() { calls.push(['close']); activeTarget = null; },
+    active: { getSnapshot: () => activeTarget },
+  };
+  const app = mount({ active: true, nativeBuild: 'rc1', contextMenus,
+    uiWorkspace: { openSession: id => calls.push(['openSession', id]) } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush();
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const useContextMenu = () => ({ getTriggerProps: target => ({
+      onContextMenu: event => { event.preventDefault(); contextMenus.open(target, { x: event.clientX, y: event.clientY }); },
+      onKeyDown: event => { if (event.key === 'F10' && event.shiftKey) contextMenus.open(target, { x: 0, y: 0 }); },
+    }) });
+    for (const [view, id, title] of [['activity', 'a', 'Activity A'], ['favorites', 'b', 'Favorite B']]) {
+      app.doc.querySelector(`[data-view="${view}"]`).click();
+      const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+      await React.act(async () => { if (!root) root = createRoot(host); root.render(React.createElement(View, {
+        useContextMenu,
+        useSessions: () => ({ ids: ['a', 'b'], byId: { a: { id: 'a', title: 'Activity A' }, b: { id: 'b', title: 'Favorite B' } } }),
+        useSessionStatus: () => new Map(),
+        useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a', 'b'] }], pinnedSessionIds: ['b'] }),
+      })); });
+      const row = [...host.querySelectorAll('.dsh-nav-fold-session')].find(node => node.querySelector(`[data-dsh-nav-fold-session-id="${id}"]`));
+      assert.ok(row, `${view} row exists`);
+      const dots = row.querySelector('[data-session-menu]');
+      assert.ok(dots, 'native ellipsis exists');
+      dots.getBoundingClientRect = () => ({ left: 12, bottom: 34 });
+      await React.act(async () => { dots.click(); });
+      assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 12, y: 34 }]);
+      await React.act(async () => { dots.click(); });
+      assert.deepEqual(calls.at(-1), ['close'], 'second click closes the native menu');
+      await React.act(async () => { row.dispatchEvent(new app.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 7, clientY: 9 })); });
+      assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 7, y: 9 }]);
+      await React.act(async () => { row.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { bubbles: true, key: 'F10', shiftKey: true })); });
+      assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 0, y: 0 }]);
+      assert.equal(host.querySelector('[role="menu"], [data-session-pin], [data-session-archive], [role="dialog"]'), null);
+      contextMenus.close();
+    }
+    assert.equal(calls.some(call => call[0] === 'openSession'), false);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
 });
 
 test('pin button is a sibling of the open button and persists through uiWorkspace', async () => {
