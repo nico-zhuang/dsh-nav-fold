@@ -75,7 +75,11 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
     }
     : (() => { throw Error(`unexpected dependency ${id}`); })());
   const disposers = [];
-  client.apply({ effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); }, slots, sessions: {}, uiWorkspace, contextMenus, configForms: { get: () => form } });
+  const ctx = { effect: fn => { const disposer = fn(); if (typeof disposer === 'function') disposers.push(disposer); },
+    slots, sessions: {}, uiWorkspace, get: name => name === 'contextMenus' && nativeBuild === 'rc1' ? contextMenus : undefined,
+    configForms: { get: () => form } };
+  if (nativeBuild === 'rc1') Object.defineProperty(ctx, 'contextMenus', { get() { throw Error('cannot get property "contextMenus" without inject'); } });
+  client.apply(ctx);
   return { dom, doc: dom.window.document, slots, form, entries, settingsPages, dispose: () => { for (const fn of disposers.reverse()) fn(); dom.window.close(); } };
 }
 
