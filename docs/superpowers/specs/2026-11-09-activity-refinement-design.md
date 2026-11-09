@@ -12,12 +12,12 @@
 
 - 当前 `window.localStorage['dsh-nav-fold:activity-preferences']` 按完整浏览器 origin（含随机端口）隔离，重启后未必可读。改用现有 `ctx.configForms.get('nav-fold')` 的 Host-backed form，插件配置新增可写 `.volatile()` 的 `activityPreferences` 字符串字段，默认值为空串 `''`（表示 Host 尚未初始化）；首次保存后即使无标记也保存非空 JSON 文本 `{"version":1,"sessions":{}}`（表示 Host 已成为权威），从而避免清空全部标记后旧缓存再度复活。安装版 DSH 0.2.2-rc.1 官方 settings/client-ui-settings 文档说明 volatile form 的写入持久化至 active profile Cordis patch，`set` 写入有序并返回成功/失败；Host profile 同一设备内跨端口共享。此字段只存 session ID 与 top/quiet/color，不存标题、会话消息、路径或系统状态；不跨设备同步。
 - 配置不就绪/不可写不能报告“已保存”；保存时先验证结构、固定色板、ID 与限制（读取字符串最多 200KB、最多 1000 项），序列化交互以免两次快速更改以旧快照覆盖新值。UI 可即时响应，但 Host 拒绝写入时恢复最近一次已保存值并显示易懂的失败信息；禁用/启用插件后从 Host 配置恢复。已有 `workspaceViewsEnabled`、`navigationEnabled`、`hideBrandEnabled` 与原生收藏设置不受写入影响。只在用户更改或必要的单次迁移时写入，不在每次渲染时写。
-- 首次 Host 字段为默认空串 `''` 且当前 origin 仍能读到旧版 localStorage 时，验证旧格式后迁移一次；保留旧键供回滚，不在此轮删除。Host 字段一旦变成非空 JSON（即使 sessions 为空），始终优先，不用旧浏览器缓存覆盖；绝不在每次渲染自动重复迁移。旧端口已不可访问的值不能假称自动找回，须如实说明。跨 profile、换设备以及清除 DSH profile 不是本轮同步需求。
+- 旧 localStorage 键没有 profile 身份，自动导入会把 A 的色标复制到新 profile B，故**不自动迁移，也不在 Host 空串时把旧偏好预览为已保存**。仅当 Host 字段为默认空串 `''` 且当前 origin 有可验证的旧格式时，在活跃列表末尾提供一次明确的「导入旧偏好」入口和跨配置归属警告；必须由用户确认属于当前 profile 后才写入 Host。成功后仅记录单独的一次性 origin marker，保留旧键供回滚；失败回滚且可重试。Host 字段一旦变成非空 JSON（即使 sessions 为空），始终优先，不用旧浏览器缓存覆盖；换 profile 或外部写入期间的旧队列按 epoch 取消，绝不将 A 待办写入 B。旧端口已不可访问的值不能假称自动找回，须如实说明。跨 profile/设备同步不是本轮需求，但 profile 间不可污染。
 - 控制写入大小与频率；如果 Host 配置表单验证拒绝这一字段或实测会导致不安全的配置重载，不退回不可靠的 browser-only 持久化或私自写 Host 文件，应停下并说明阻断原因。
 
 ## 验证与交付门槛
 
 1. 先新增 RED 回归：同色复选清除、A 色条满行但不增加行高、免打扰置灰及月亮并撤除顶部管理、Quiet 保留真实排序/上限、收藏/宿主菜单/通知隔离。
-2. 再新增 RED 持久化回归：两个不同浏览器 origin（代表不同 localhost 端口）共用同一 Host form；旧 localStorage 只在当前 origin 迁移且不覆盖 Host；异步写入失败和快速连续操作不丢数据；禁用再启用从 Host 恢复。
+2. 再新增 RED 持久化回归：两个不同浏览器 origin（代表不同 localhost 端口）共用同一 Host form；旧 localStorage 仅在当前 origin/Host 空串时提示，由用户明确确认导入而不覆盖 Host；profile 切换中挂起的旧队列取消；异步写入失败和快速连续操作不丢数据；禁用再启用从 Host 恢复。
 3. 修复后跑全量测试、源文件语法/差异检查，在匿名 220/320px 狭窄视图目检普通、色标、置灰、置顶、选中、焦点和触屏状态；不能把匿名预览冒称已登录 DSH 真实 GUI。
 4. 制作不复用 preview.2 编号的独立本机预览包；先备份当前 desktop manifest/lock/preview.2，打包逐文件校验后离线安装、不强杀当前 DSH；建议用户正常重启做真实界面验收。无用户授权不发布公开版或合并主分支。

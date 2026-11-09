@@ -21,9 +21,10 @@ const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 's
 } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false, url = 'http://localhost/', activityPreferences = '', legacyActivityPreferences } = {}) {
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false, url = 'http://localhost/', activityPreferences = '', legacyActivityPreferences, activityMigrationMarker } = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url });
   if (legacyActivityPreferences !== undefined) dom.window.localStorage.setItem('dsh-nav-fold:activity-preferences', legacyActivityPreferences);
+  if (activityMigrationMarker !== undefined) dom.window.localStorage.setItem('dsh-nav-fold:activity-migration-completed', activityMigrationMarker);
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
   if (mode !== 'workspace') dom.window.localStorage.setItem('dsh-nav-fold:workspace-mode', mode);
@@ -1289,8 +1290,8 @@ test('reduced motion disables the action strip fade', () => {
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*\.dsh-nav-fold-session-actions\s*\{[^}]*transition:\s*none/.test(source), 'action fade must stop when reduced motion is requested');
 });
 
-async function withArchiveView(uiWorkspace, check, { favorites = false, url, activityPreferences, legacyActivityPreferences } = {}) {
-  const app = mount({ active: true, uiWorkspace, url, activityPreferences, legacyActivityPreferences });
+async function withArchiveView(uiWorkspace, check, { favorites = false, url, activityPreferences, legacyActivityPreferences, activityMigrationMarker } = {}) {
+  const app = mount({ active: true, uiWorkspace, url, activityPreferences, legacyActivityPreferences, activityMigrationMarker });
   const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
@@ -1587,19 +1588,172 @@ test('a rejected color write cannot leak into a later successful queued Quiet wr
   });
 });
 
-test('current-origin legacy Activity preferences migrate only when the Host field is uninitialized', async () => {
+test('Host conflict on rejected Activity write rehydrates remote value before the next action', async () => {
+  const initial = JSON.stringify({ version: 1, sessions: { a: { top: true } } });
+  const remote = JSON.stringify({ version: 1, sessions: { a: { top: true, color: 'rose' }, b: { color: 'green' } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    const original = app.form.set.bind(app.form);
+    let rejectOnce = true, settleConflict;
+    app.form.set = async (field, value) => {
+      if (field === 'activityPreferences' && rejectOnce) {
+        rejectOnce = false; app.form.publishValue({ activityPreferences: remote });
+        return new Promise(resolve => { settleConflict = resolve; });
+      }
+      return original(field, value);
+    };
+    const menu = host.querySelector('[data-session-menu]');
+    try {
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+      await React.act(async () => { await flush(); });
+    } finally { settleConflict?.(false); }
+    await React.act(async () => { await flush(); });
+    assert.ok(host.querySelector('[data-activity-color="rose"]'), 'rejected blue write must display remote Host rose instead of stale local state');
+    await React.act(async () => { menu.click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); await flush(); });
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions,
+      { a: { top: true, color: 'rose', quiet: true }, b: { color: 'green' } }, 'next write merges remote data instead of overwriting it');
+  }, { activityPreferences: initial });
+});
+
+test('switching to a fresh Host profile clears prior Activity flags before the next action', async () => {
+  await withArchiveView({}, async ({ app, host }) => {
+    const menu = host.querySelector('[data-session-menu]');
+    await React.act(async () => { menu.click(); });
+    await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); await flush(); });
+    assert.ok(host.querySelector('[data-activity-color="blue"]'), 'profile A color committed');
+    app.dom.window.localStorage.setItem('dsh-nav-fold:activity-preferences', JSON.stringify({ version: 1, sessions: { a: { color: 'green' } } }));
+    await React.act(async () => { app.form.publishValue({ activityPreferences: '' }); await flush(); });
+    assert.ok(!host.querySelector('[data-activity-color]'), 'a new empty Host profile does not inherit A blue');
+    await React.act(async () => { menu.click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); await flush(); });
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { quiet: true }, 'new Host profile receives only its own setting');
+  });
+});
+
+test('queued Activity edits are cancelled when Host switches profiles during an in-flight write', async () => {
+  const profileA = JSON.stringify({ version: 1, sessions: { a: { top: true } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    let release, first = true;
+    const original = app.form.set.bind(app.form);
+    app.form.set = async (field, value) => {
+      if (field === 'activityPreferences' && first) {
+        first = false; return new Promise(resolve => { release = () => resolve(true); }); // First set belonged to profile A, not currently active B.
+      }
+      return original(field, value);
+    };
+    const menu = host.querySelector('[data-session-menu]');
+    try {
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+      await React.act(async () => { app.form.publishValue({ activityPreferences: '' }); await flush(); });
+    } finally { release?.(); }
+    await React.act(async () => { await flush(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '', 'pending profile A edits must not be written into B');
+    assert.ok(!host.querySelector('[data-activity-color], .dsh-nav-fold-session-quiet'), 'new profile shows neither A color nor A Quiet');
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 0, 'second queued A edit never touches B');
+  }, { activityPreferences: profileA });
+});
+
+test('new profile actions queued behind an old in-flight write survive the epoch transition', async () => {
+  const profileA = JSON.stringify({ version: 1, sessions: { a: { top: true } } });
+  for (const profileB of ['', JSON.stringify({ version: 1, sessions: { a: { color: 'rose' } } })]) {
+    await withArchiveView({}, async ({ app, host }) => {
+      let release, first = true;
+      const original = app.form.set.bind(app.form);
+      app.form.set = async (field, value) => {
+        if (field === 'activityPreferences' && first) { first = false; return new Promise(resolve => { release = () => resolve(true); }); }
+        return original(field, value);
+      };
+      const menu = host.querySelector('[data-session-menu]');
+      try {
+        await React.act(async () => { menu.click(); });
+        await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+        await React.act(async () => { app.form.publishValue({ activityPreferences: profileB }); await flush(); });
+        await React.act(async () => { menu.click(); });
+        await React.act(async () => { host.querySelector('[data-activity-swatch="green"]').click(); });
+      } finally { release?.(); }
+      await React.act(async () => { await flush(); await flush(); });
+      assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { color: 'green' }, 'B action saves to B after cancelling A');
+      assert.ok(host.querySelector('[data-activity-color="green"]'), 'B own green remains visible');
+      assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 1, 'exactly B write reached active profile');
+    }, { activityPreferences: profileA });
+  }
+});
+
+test('in-flight profile switch to another nonempty Host document also cancels old queued edits', async () => {
+  const profileA = JSON.stringify({ version: 1, sessions: { a: { top: true } } });
+  const profileB = JSON.stringify({ version: 1, sessions: { a: { color: 'rose' } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    let release, first = true;
+    const original = app.form.set.bind(app.form);
+    app.form.set = async (field, value) => {
+      if (field === 'activityPreferences' && first) { first = false; return new Promise(resolve => { release = () => resolve(true); }); }
+      return original(field, value);
+    };
+    const menu = host.querySelector('[data-session-menu]');
+    try {
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+      await React.act(async () => { app.form.publishValue({ activityPreferences: profileB }); await flush(); });
+    } finally { release?.(); }
+    await React.act(async () => { await flush(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.activityPreferences, profileB, 'B document never receives A queued patch');
+    assert.ok(host.querySelector('[data-activity-color="rose"]'), 'B own marker is shown');
+    assert.ok(!host.querySelector('.dsh-nav-fold-session-quiet'));
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 0);
+  }, { activityPreferences: profileA });
+});
+
+test('failed explicit legacy import keeps a retry button and never marks the old cache as migrated', async () => {
+  const legacy = JSON.stringify({ version: 1, sessions: { a: { color: 'green' } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    const original = app.form.set.bind(app.form);
+    app.form.set = async () => false;
+    await React.act(async () => { host.querySelector('[data-activity-import-legacy]').click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '');
+    assert.ok(!host.querySelector('[data-activity-color]'));
+    assert.ok(host.querySelector('[data-activity-import-legacy]'), 'same-profile retry remains possible');
+    assert.match(host.querySelector('[role="alert"]')?.textContent || '', /未能导入/);
+    assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-migration-completed'), null);
+    app.form.set = original;
+    await React.act(async () => { host.querySelector('[data-activity-import-legacy]').click(); await flush(); });
+    assert.equal(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a.color, 'green');
+    assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-migration-completed'), '1');
+  }, { legacyActivityPreferences: legacy });
+});
+
+test('old origin Activity preferences require explicit current-profile import and never auto-leak', async () => {
   const legacy = JSON.stringify({ version: 1, sessions: { a: { quiet: true, color: 'green' } } });
+  let marker;
   await withArchiveView({}, async ({ app, host }) => {
     await React.act(async () => { await flush(); });
-    assert.equal(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a.color, 'green');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '', 'unattributed browser cache is never automatically written to a Host profile');
+    assert.ok(!host.querySelector('[data-activity-color], .dsh-nav-fold-session-quiet'), 'legacy data is not displayed as saved');
+    const importButton = host.querySelector('[data-activity-import-legacy]');
+    assert.ok(importButton, 'explicit import is offered only for uninitialized Host data');
+    assert.match(importButton.parentElement.textContent, /其他.*配置|其他.*profile/, 'old cache may belong to another profile');
+    await React.act(async () => { importButton.click(); await flush(); });
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { quiet: true, color: 'green' });
     assert.ok(host.querySelector('[data-activity-color="green"]'));
+    marker = app.dom.window.localStorage.getItem('dsh-nav-fold:activity-migration-completed');
+    assert.equal(marker, '1', 'successful explicit import prevents repeated offers for the old origin cache');
     assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'), legacy, 'old cache stays for rollback');
   }, { legacyActivityPreferences: legacy, activityPreferences: '' });
   await withArchiveView({}, async ({ app, host }) => {
     await React.act(async () => { await flush(); });
-    assert.ok(!host.querySelector('[data-activity-color]'), 'Host saved empty JSON wins over stale browser cache');
-    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 0, 'no repeated migration');
+    assert.ok(!host.querySelector('[data-activity-color], [data-activity-import-legacy]'), 'Host saved empty JSON wins over stale browser cache');
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 0);
   }, { legacyActivityPreferences: legacy, activityPreferences: '{"version":1,"sessions":{}}' });
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { await flush(); });
+    assert.ok(!host.querySelector('[data-activity-color], [data-activity-import-legacy]'), 'fresh profile B cannot automatically import profile A cache after A imported');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '');
+  }, { legacyActivityPreferences: legacy, activityPreferences: '', activityMigrationMarker: marker });
 });
 
 test('choosing an Activity swatch restores focus to its row menu anchor', async () => {
