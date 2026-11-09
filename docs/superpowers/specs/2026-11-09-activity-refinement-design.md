@@ -10,9 +10,9 @@
 
 ## 可跨端口恢复的本机存储
 
-- 当前 `window.localStorage['dsh-nav-fold:activity-preferences']` 按完整浏览器 origin（含随机端口）隔离，重启后未必可读。改用现有 `ctx.configForms.get('nav-fold')` 的 Host-backed form，插件配置新增可写 `.volatile()` 的 `activityPreferences` 字段，保存 `{"version":1,"sessions":{...}}`。安装版 DSH 0.2.2-rc.1 官方 settings/client-ui-settings 文档说明 volatile form 的写入持久化至 active profile Cordis patch，`set` 写入有序并返回成功/失败；Host profile 同一设备内跨端口共享。此字段只存 session ID 与 top/quiet/color，不存标题、会话消息、路径或系统状态；不跨设备同步。
+- 当前 `window.localStorage['dsh-nav-fold:activity-preferences']` 按完整浏览器 origin（含随机端口）隔离，重启后未必可读。改用现有 `ctx.configForms.get('nav-fold')` 的 Host-backed form，插件配置新增可写 `.volatile()` 的 `activityPreferences` 字符串字段，默认值为空串 `''`（表示 Host 尚未初始化）；首次保存后即使无标记也保存非空 JSON 文本 `{"version":1,"sessions":{}}`（表示 Host 已成为权威），从而避免清空全部标记后旧缓存再度复活。安装版 DSH 0.2.2-rc.1 官方 settings/client-ui-settings 文档说明 volatile form 的写入持久化至 active profile Cordis patch，`set` 写入有序并返回成功/失败；Host profile 同一设备内跨端口共享。此字段只存 session ID 与 top/quiet/color，不存标题、会话消息、路径或系统状态；不跨设备同步。
 - 配置不就绪/不可写不能报告“已保存”；保存时先验证结构、固定色板、ID 与限制（读取字符串最多 200KB、最多 1000 项），序列化交互以免两次快速更改以旧快照覆盖新值。UI 可即时响应，但 Host 拒绝写入时恢复最近一次已保存值并显示易懂的失败信息；禁用/启用插件后从 Host 配置恢复。已有 `workspaceViewsEnabled`、`navigationEnabled`、`hideBrandEnabled` 与原生收藏设置不受写入影响。只在用户更改或必要的单次迁移时写入，不在每次渲染时写。
-- 首次 Host 字段为空且当前 origin 仍能读到旧版 localStorage 时，验证旧格式后迁移一次；**先 Host 写成功，才清理当前 origin 的旧键**，防止清除全部偏好后旧数据复活。Host 有数据时永远优先，不用旧浏览器缓存覆盖。旧端口已不可访问的值不能假称自动找回，须如实说明。跨 profile、换设备以及清除 DSH profile 不是本轮同步需求。
+- 首次 Host 字段为默认空串 `''` 且当前 origin 仍能读到旧版 localStorage 时，验证旧格式后迁移一次；保留旧键供回滚，不在此轮删除。Host 字段一旦变成非空 JSON（即使 sessions 为空），始终优先，不用旧浏览器缓存覆盖；绝不在每次渲染自动重复迁移。旧端口已不可访问的值不能假称自动找回，须如实说明。跨 profile、换设备以及清除 DSH profile 不是本轮同步需求。
 - 控制写入大小与频率；如果 Host 配置表单验证拒绝这一字段或实测会导致不安全的配置重载，不退回不可靠的 browser-only 持久化或私自写 Host 文件，应停下并说明阻断原因。
 
 ## 验证与交付门槛
