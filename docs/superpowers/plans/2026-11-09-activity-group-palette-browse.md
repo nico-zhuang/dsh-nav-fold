@@ -25,7 +25,7 @@
 
 - [ ] **Step 1: Write failing React test** with Host Activity preferences `{version:1,sessions:{a:{top:true},b:{top:true,quiet:true}}}` and three visible rows. Assert the group heading `顶部固定`, grouped row IDs `a,b`, `b` retains Quiet icon, third row stays outside; no group if no top rows; Favorites has no group.
 - [ ] **Step 2: RED** `node --test --test-name-pattern='Activity top group' test/safe-views.test.js` must fail on absent group.
-- [ ] **Step 3: GREEN** partition `rows.filter(row=>row.top)` in `WorkspaceView` and reuse its existing row mapper for group/ordinary rows. Add compact heading and optional dividing border in its CSS string. Use `role="group" aria-labelledby` and a stable heading ID; no Quiet manager.
+- [ ] **Step 3: GREEN** partition `rows.filter(row=>row.top)` in `WorkspaceView` and reuse its existing row mapper for group/ordinary rows. Add compact h3 heading and optional dividing border in its CSS string. Keep both as sibling nodes of keyed rows (not a wrapper around rows), so profile/Pin changes do not remount a Host menu anchor; the rows retain their per-row Activity top ARIA name. No Quiet manager.
 - [ ] **Step 4: Verify** same targeted test and `npm test`, then commit only this task.
 
 ### Task 2: Five high-saturation cool markers and Host theme

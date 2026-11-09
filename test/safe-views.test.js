@@ -1472,6 +1472,35 @@ test('Activity menu A groups equal six-color choices under a visible color headi
   });
 });
 
+test('Activity top group contains only fixed rows and keeps Quiet in place', async () => {
+  const prefs = JSON.stringify({ version: 1, sessions: { a: { top: true }, b: { top: true, quiet: true } } });
+  const app = mount({ active: true, activityPreferences: prefs });
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const ids = ['a', 'b', 'c'];
+    const props = { useSessions: () => ({ ids, byId: Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: 30 - i }])) }),
+      useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [], pinnedSessionIds: ['a', 'b'] }) };
+    const html = () => { const host = app.doc.createElement('div'); host.innerHTML = renderToStaticMarkup(React.createElement(View, props)); return host; };
+    let host = html();
+    const group = host.querySelector('[data-activity-top-group]');
+    assert.ok(group, 'fixed rows have a distinct visible heading');
+    assert.equal(group.querySelector('[data-activity-top-heading]')?.textContent, '顶部固定');
+    const directRows = [...host.querySelector('[data-dsh-workspace-view="activity"]').children];
+    assert.deepEqual(directRows.map(node => node.querySelector('[data-dsh-nav-fold-session-id]')?.dataset.dshNavFoldSessionId ||
+      (node.matches('[data-activity-top-group]') ? 'heading' : node.matches('[data-activity-top-divider]') ? 'divider' : 'other')),
+      ['heading', 'a', 'b', 'divider', 'c'], 'header and separator define a top lane without reparenting session controls');
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="b"]')?.closest('.dsh-nav-fold-session-quiet')?.querySelector('[data-activity-quiet-icon]'));
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="c"]'), 'ordinary session stays visible');
+    app.form.publishValue({ activityPreferences: '{"version":1,"sessions":{}}' });
+    host = html();
+    assert.equal(host.querySelector('[data-activity-top-group]'), null, 'no fixed rows means no empty heading');
+    app.doc.querySelector('[data-view="favorites"]').click();
+    host = html();
+    assert.equal(host.querySelector('[data-activity-top-group]'), null, 'native Favorites never inherits the Activity group');
+  } finally { app.dispose(); }
+});
+
 test('Quiet running session keeps its Activity row, is muted and can be restored inline without a manager', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
