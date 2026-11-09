@@ -1180,7 +1180,7 @@ test('ellipsis menu opens safe session actions without activating the main row',
       assert.equal(item.querySelector('[data-menu-icon]'), null, 'Host default left-side icon is intentionally not used');
     }
     const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
-    assert.deepEqual(swatches.map(button => button.getAttribute('data-activity-swatch')), ['none', 'blue', 'green', 'amber', 'rose', 'violet']);
+    assert.deepEqual(swatches.map(button => button.getAttribute('data-activity-swatch')), ['none', 'green', 'blue', 'violet', 'rose', 'amber']);
     assert.ok(swatches.every(button => button.getAttribute('role') === 'menuitemradio' && button.getAttribute('aria-label') && button.title && !button.disabled));
     assert.equal(swatches[0].getAttribute('aria-checked'), 'true', 'no color is a selected actionable swatch');
     assert.ok(swatches[0].querySelector('[data-activity-no-color-icon] svg'), 'no-color has a slashed mark icon');
@@ -1464,12 +1464,49 @@ test('Activity menu A groups equal six-color choices under a visible color headi
     assert.equal(section.querySelector('[data-activity-color-heading]')?.textContent, '色标');
     const grid = section.querySelector('[role="group"][aria-label="活跃色标"]');
     assert.ok(grid, 'visible title and screen-reader group label agree');
-    assert.deepEqual([...grid.querySelectorAll('[data-activity-swatch]')].map(button => button.dataset.activitySwatch),
-      ['none', 'blue', 'green', 'amber', 'rose', 'violet']);
+    const swatches = [...grid.querySelectorAll('[data-activity-swatch]')];
+    assert.deepEqual(swatches.map(button => button.dataset.activitySwatch),
+      ['none', 'green', 'blue', 'violet', 'rose', 'amber'], 'old Host color IDs remain rollback-compatible slots');
+    assert.deepEqual(swatches.map(button => button.title), ['清除色标', '青蓝', '钴蓝', '靛蓝', '雾紫', '银灰']);
     const css = source.match(/\.dsh-nav-fold-color-section\s*\{([^}]*)\}/)?.[1] || '';
     assert.match(css, /border-top:\s*1px/);
     assert.match(source, /\.dsh-nav-fold-color-heading\s*\{[^}]*font-size:\s*11px/);
   });
+});
+
+test('Activity cool palette uses Host light and dark modes with rollback-safe slots', async () => {
+  const saved = JSON.stringify({ version: 1, sessions: { a: { color: 'green', quiet: true } } });
+  const app = mount({ active: true, activityPreferences: saved });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', '#26394f');
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const props = { useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } }),
+      useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [], pinnedSessionIds: [] }) };
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, props)); });
+    const mark = host.querySelector('.dsh-nav-fold-color-mark');
+    assert.equal(mark?.getAttribute('aria-label'), '色标: 青蓝', 'v1 green slot must not be spoken as task green');
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'explicit Host light foreground selects saturated cyan');
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    const swatches = () => [...host.querySelectorAll('[data-activity-swatch]')];
+    assert.deepEqual(swatches().slice(1).map(node => node.style.getPropertyValue('--dsh-nav-fold-swatch')),
+      ['#075e82', '#0754bd', '#532bbb', '#7f26a5', '#49586c']);
+    await React.act(async () => { app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', '#e8edf4'); await flush(); });
+    assert.equal(app.dom.window.getComputedStyle(app.doc.documentElement).getPropertyValue('--dsw-alias-label-primary').trim(), '#e8edf4');
+    assert.equal(mark.style.backgroundColor, 'rgb(114, 202, 218)', 'Host dark overrides OS light/dark preference');
+    assert.deepEqual(swatches().slice(1).map(node => node.style.getPropertyValue('--dsh-nav-fold-swatch')),
+      ['#72cada', '#80afff', '#b09aff', '#cf9ceb', '#b2bac8']);
+    assert.match(source, /\.dsh-nav-fold-session-quiet \.dsh-nav-fold-color-mark\s*\{[^}]*opacity:\s*\.85/);
+    assert.equal(app.form.getSnapshot().value.activityPreferences, saved, 'theme and migration do not rewrite Host v1 preferences');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
 });
 
 test('Activity top group contains only fixed rows and keeps Quiet in place', async () => {
