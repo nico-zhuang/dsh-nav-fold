@@ -1456,6 +1456,22 @@ test('A left stripe spans the compact row while Quiet stays actionable', () => {
   assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
 });
 
+test('Activity menu A groups equal six-color choices under a visible color heading', async () => {
+  await withArchiveView({}, async ({ host }) => {
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    const section = host.querySelector('[data-activity-color-section]');
+    assert.ok(section, 'only the Activity organizer adds the color section');
+    assert.equal(section.querySelector('[data-activity-color-heading]')?.textContent, '色标');
+    const grid = section.querySelector('[role="group"][aria-label="活跃色标"]');
+    assert.ok(grid, 'visible title and screen-reader group label agree');
+    assert.deepEqual([...grid.querySelectorAll('[data-activity-swatch]')].map(button => button.dataset.activitySwatch),
+      ['none', 'blue', 'green', 'amber', 'rose', 'violet']);
+    const css = source.match(/\.dsh-nav-fold-color-section\s*\{([^}]*)\}/)?.[1] || '';
+    assert.match(css, /border-top:\s*1px/);
+    assert.match(source, /\.dsh-nav-fold-color-heading\s*\{[^}]*font-size:\s*11px/);
+  });
+});
+
 test('Quiet running session keeps its Activity row, is muted and can be restored inline without a manager', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
