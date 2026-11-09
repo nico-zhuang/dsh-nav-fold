@@ -1561,6 +1561,22 @@ test('Activity top group contains only fixed rows and keeps Quiet in place', asy
   } finally { app.dispose(); }
 });
 
+test('Activity Quiet and selected light-theme subtitle contrast stays above WCAG AA', () => {
+  const standard = Number(source.match(/\.dsh-nav-fold-session-subtitle\s*\{[^}]*currentColor\s+(\d+)%/)?.[1]);
+  const quiet = Number(source.match(/\.dsh-nav-fold-session-quiet \.dsh-nav-fold-session-subtitle\s*\{[^}]*currentColor\)\s+(\d+)%/)?.[1]);
+  assert.ok(standard && quiet, 'read actual CSS mix percentages');
+  const primary = [0x26, 0x39, 0x4f], background = [0xf0, 0xf2, 0xf5];
+  const luminance = (rgb) => rgb.reduce((total, channel, index) => {
+    const value = channel / 255;
+    return total + [0.2126, 0.7152, 0.0722][index] * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  }, 0);
+  for (const [name, percent] of [['normal', standard], ['Quiet', quiet]]) {
+    const text = primary.map(channel => (channel * percent + 255 * (100 - percent)) / 100);
+    const contrast = (luminance(background) + 0.05) / (luminance(text) + 0.05);
+    assert.ok(contrast >= 4.5, `${name} 11px subtitle must remain AA readable on selected #f0f2f5: ${contrast.toFixed(2)}:1`);
+  }
+});
+
 test('Activity browse hold resets on external Host profile replacement but survives same-profile color edit', async () => {
   const profileA = '{"version":1,"sessions":{}}';
   const profileB = '{"version":1,"sessions":{"a":{"color":"rose"}}}';
