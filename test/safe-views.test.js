@@ -1061,6 +1061,13 @@ test('native session menu hands Activity and Favorites actions to the host', asy
       assert.ok(row, `${view} row exists`);
       const dots = row.querySelector('[data-session-menu]');
       assert.ok(dots, 'native ellipsis exists');
+      if (view === 'activity') {
+        const organize = row.querySelector('[data-activity-organize]');
+        assert.ok(organize, 'Activity has an organization control beside the native ellipsis');
+        await React.act(async () => { organize.click(); });
+        assert.ok([...host.querySelectorAll('[role="menuitem"]')].some(item => /活跃置顶/.test(item.textContent)));
+        await React.act(async () => { organize.click(); });
+      } else assert.equal(row.querySelector('[data-activity-organize], [data-activity-color]'), null, 'Favorites has no Activity actions');
       dots.getBoundingClientRect = () => ({ left: 12, bottom: 34 });
       await React.act(async () => { dots.click(); });
       assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), ['open', { kind: 'session', value: { sessionId: id, displayTitle: title } }, { x: 12, y: 34 }]);
@@ -1151,7 +1158,9 @@ test('ellipsis menu opens safe session actions without activating the main row',
     assert.equal(dots.getAttribute('aria-haspopup'), 'menu');
     await React.act(async () => { dots.click(); });
     let items = [...host.querySelectorAll('[role="menuitem"]')];
-    assert.equal(items.length, 4, 'Open, Pin, Archive and Copy ID are independent actions');
+    assert.equal(items.length, 12, 'four original Host actions remain alongside eight Activity-only organization actions');
+    for (const label of ['打开会话', '收藏会话', '归档会话', '复制会话 ID', '活跃置顶', '免打扰', '无色', '蓝色'])
+      assert.ok(items.some(item => item.textContent.includes(label)), `${label} is available without replacing existing actions`);
     assert.deepEqual(calls, [], 'opening menu does not open the conversation');
     await React.act(async () => { items.find(item => /复制会话 ID/.test(item.textContent)).click(); await flush(); });
     assert.deepEqual(calls, [['copy', 'a']]);
@@ -1400,4 +1409,74 @@ test('archive controls reserve three targets at 220px without hover layout shift
   assert.match(actions, /position:\s*absolute/);
   assert.match(actions, /gap:\s*2px/);
   assert.match(source, /@media\s*\(hover:\s*none\)[^\n]*\.dsh-nav-fold-session-actions/);
+});
+
+test('Quiet running session that falls past recent cap remains recoverable from Activity management', async () => {
+  const app = mount({ active: true });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const ids = ['busy', ...Array.from({ length: 24 }, (_, i) => `recent${i}`)];
+    const byId = Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: id === 'busy' ? 1 : 100 - i, running: id === 'busy' }]));
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      useSessions: () => ({ ids, byId }), useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [], pinnedSessionIds: [] }),
+    })); });
+    const busy = host.querySelector('[data-dsh-nav-fold-session-id="busy"]');
+    assert.ok(busy, 'running row starts visible');
+    await React.act(async () => { busy.closest('.dsh-nav-fold-session').querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+    assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'), null, 'quiet row beyond recent cap leaves main Activity');
+    const manage = host.querySelector('[data-activity-quiet-manage]');
+    assert.ok(manage, 'quiet session remains discoverable from Activity');
+    await React.act(async () => { manage.click(); });
+    const restore = host.querySelector('[data-activity-quiet-restore="busy"]');
+    assert.ok(restore, 'management exposes a direct cancel action');
+    await React.act(async () => { restore.click(); });
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'), 'restored running session returns to main Activity');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('Quiet management explains local save failure instead of silently claiming persistence', async () => {
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+    await React.act(async () => { host.querySelector('[data-activity-quiet-manage]').click(); });
+    const storagePrototype = Object.getPrototypeOf(app.dom.window.localStorage);
+    const descriptor = Object.getOwnPropertyDescriptor(storagePrototype, 'setItem');
+    Object.defineProperty(storagePrototype, 'setItem', { configurable: true, value() { throw Error('quota'); } });
+    try {
+      await React.act(async () => { host.querySelector('[data-activity-quiet-restore="a"]').click(); });
+      assert.match(host.querySelector('[data-dsh-workspace-view="activity"] [role="alert"]')?.textContent || '', /未能保存/);
+    } finally { Object.defineProperty(storagePrototype, 'setItem', descriptor); }
+  });
+});
+
+test('Activity organize menu persists independent top, quiet and color without touching native Pin', async () => {
+  const calls = [];
+  await withArchiveView({ pinSession: id => calls.push(['pin', id]), unpinSession: id => calls.push(['unpin', id]) }, async ({ app, host, render }) => {
+    const open = async () => React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    const choose = async (label) => {
+      const item = [...host.querySelectorAll('[role="menuitem"]')].find(node => node.textContent.includes(label));
+      assert.ok(item, `Activity action ${label} exists`);
+      await React.act(async () => { item.click(); });
+    };
+    await open(); await choose('活跃置顶');
+    assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="a"]').closest('.dsh-nav-fold-session').getAttribute('data-activity-top'), 'true');
+    await open(); await choose('免打扰');
+    await open(); await choose('蓝色');
+    const stored = JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'));
+    assert.deepEqual(JSON.parse(JSON.stringify(stored.sessions.a)), { top: true, quiet: true, color: 'blue' });
+    assert.deepEqual(calls, [], 'activity preference never calls host Pin');
+    assert.ok(host.querySelector('[data-activity-color="blue"]'));
+    await render();
+    assert.equal(host.querySelector('[data-activity-top="true"]').querySelector('[data-dsh-nav-fold-session-id]').getAttribute('data-dsh-nav-fold-session-id'), 'a');
+  });
 });

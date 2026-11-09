@@ -297,6 +297,52 @@ test('Activity caps only recent rows while Favorites retains native pins beyond 
   dispose();
 });
 
+test('Activity saved preferences reject unknown fields, unsafe colors and malformed data', () => {
+  const { client, dispose } = start();
+  try {
+    const parse = client.__test__.parseActivityPreferences;
+    assert.equal(typeof parse, 'function');
+    assert.deepEqual(JSON.parse(JSON.stringify(parse('{bad'))), {});
+    const result = parse(JSON.stringify({ version: 1, sessions: {
+      a: { top: true, quiet: true, color: 'blue', evil: 1 },
+      b: { top: 'true', quiet: 1, color: 'url(javascript:alert(1))' },
+      c: { color: 'unknown' },
+    } }));
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { a: { top: true, quiet: true, color: 'blue' } });
+    assert.deepEqual(JSON.parse(JSON.stringify(parse(JSON.stringify({ version: 999, sessions: { a: { top: true } } })))), {});
+  } finally { dispose(); }
+});
+
+test('Activity top pin is separate from Favorites and bypasses the recent cap', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = Array.from({ length: 24 }, (_, i) => `s${i}`);
+    const byId = Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: 24 - i }]));
+    const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), { pinnedSessionIds: ['s22'] }, new Set(), 20, { s23: { top: true } });
+    assert.equal(result.activity[0].id, 's23');
+    assert.equal(result.activity.length, 21, '20 ordinary recent rows plus top-pinned item');
+    assert.equal(result.activity[0].top, true);
+    assert.deepEqual(result.favorites.map(row => row.id), ['s22']);
+  } finally { dispose(); }
+});
+
+test('Activity quiet running session is sorted and capped as recent without falsifying Host status', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = ['busy', 'a', 'b'];
+    const byId = { busy: { id: 'busy', running: true, updatedAt: 1 }, a: { id: 'a', updatedAt: 3 }, b: { id: 'b', updatedAt: 2 } };
+    const list = { ids, byId };
+    const statuses = new Map([['busy', { running: true }]]);
+    const quiet = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set(), 2, { busy: { quiet: true } });
+    assert.deepEqual(quiet.activity.map(row => row.id), ['a', 'b']);
+    assert.equal(statuses.get('busy').running, true);
+    const top = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set(), 2, { busy: { quiet: true, top: true } });
+    assert.deepEqual(top.activity.map(row => row.id), ['busy', 'a', 'b']);
+    assert.equal(top.activity[0].kind, 'running', 'real status remains available');
+    assert.equal(top.activity[0].quiet, true);
+  } finally { dispose(); }
+});
+
 test('Activity uses host completionUnread without inventing unread for idle sessions', () => {
   const { client, dispose } = start();
   const list = { ids: ['done', 'idle'], byId: { done: { id: 'done', title: 'Done', running: false }, idle: { id: 'idle', title: 'Idle', completionUnread: true, running: false } } };
