@@ -21,18 +21,19 @@ const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 's
 } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false } = {}) {
-  const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url: 'http://localhost/' });
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false, url = 'http://localhost/', activityPreferences = '', legacyActivityPreferences } = {}) {
+  const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url });
+  if (legacyActivityPreferences !== undefined) dom.window.localStorage.setItem('dsh-nav-fold:activity-preferences', legacyActivityPreferences);
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
   if (folded) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs-collapsed', 'true');
   if (mode !== 'workspace') dom.window.localStorage.setItem('dsh-nav-fold:workspace-mode', mode);
   const listeners = new Set();
   const form = {
-    snapshot: { status, value: { workspaceViewsEnabled: active, hideBrandEnabled: false }, writable: true, revision: 1 },
+    snapshot: { status, value: { workspaceViewsEnabled: active, hideBrandEnabled: false, activityPreferences }, writable: true, revision: 1 },
     setCalls: [],
     getSnapshot() { return this.snapshot; },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled'].includes(field)); this.setCalls.push([field, value]); this.publishValue({ [field]: value }); return true; },
+    async set(field, value) { assert.ok(['workspaceViewsEnabled', 'hideBrandEnabled', 'navigationEnabled', 'activityPreferences'].includes(field)); this.setCalls.push([field, value]); this.publishValue({ [field]: value }); return true; },
     publishValue(changes) { this.snapshot = { ...this.snapshot, status: 'ready', value: { ...this.snapshot.value, ...changes }, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
     publish(value) { this.publishValue({ workspaceViewsEnabled: value }); },
     setStatus(status) { this.snapshot = { ...this.snapshot, status, revision: this.snapshot.revision + 1 }; for (const fn of listeners) fn(); },
@@ -1288,8 +1289,8 @@ test('reduced motion disables the action strip fade', () => {
   assert.ok(/@media\s*\(prefers-reduced-motion:\s*reduce\)[^\n]*\.dsh-nav-fold-session-actions\s*\{[^}]*transition:\s*none/.test(source), 'action fade must stop when reduced motion is requested');
 });
 
-async function withArchiveView(uiWorkspace, check, { favorites = false } = {}) {
-  const app = mount({ active: true, uiWorkspace });
+async function withArchiveView(uiWorkspace, check, { favorites = false, url, activityPreferences, legacyActivityPreferences } = {}) {
+  const app = mount({ active: true, uiWorkspace, url, activityPreferences, legacyActivityPreferences });
   const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
@@ -1488,17 +1489,15 @@ test('Quiet running session keeps its Activity row, is muted and can be restored
   }
 });
 
-test('Quiet menu action reports local save failure without a management header', async () => {
+test('Quiet menu action reports Host save rejection and rolls back the local preview', async () => {
   await withArchiveView({}, async ({ app, host }) => {
-    const storagePrototype = Object.getPrototypeOf(app.dom.window.localStorage);
-    const descriptor = Object.getOwnPropertyDescriptor(storagePrototype, 'setItem');
-    Object.defineProperty(storagePrototype, 'setItem', { configurable: true, value() { throw Error('quota'); } });
-    try {
-      await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
-      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
-      assert.equal(host.querySelector('[data-activity-quiet-manage]'), null);
-      assert.match(host.querySelector('[data-dsh-workspace-view="activity"] [role="alert"]')?.textContent || '', /未能保存/);
-    } finally { Object.defineProperty(storagePrototype, 'setItem', descriptor); }
+    const set = app.form.set.bind(app.form);
+    app.form.set = async (field, value) => field === 'activityPreferences' ? false : set(field, value);
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); await flush(); });
+    assert.equal(host.querySelector('[data-activity-quiet-manage]'), null);
+    assert.ok(!host.querySelector('.dsh-nav-fold-session-quiet'), 'rejected write cannot masquerade as saved');
+    assert.match(host.querySelector('[data-dsh-workspace-view="activity"] [role="alert"]')?.textContent || '', /未能保存/);
   });
 });
 
@@ -1518,16 +1517,89 @@ test('Activity organize menu persists independent top, quiet and color without t
     const blue = host.querySelector('[data-activity-swatch="blue"]'); blue.focus();
     await React.act(async () => { blue.click(); });
     assert.ok(app.doc.activeElement === host.querySelector('[data-session-menu]'), 'selecting a swatch returns keyboard focus to the menu anchor');
-    const stored = JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'));
+    const stored = JSON.parse(app.form.getSnapshot().value.activityPreferences);
     assert.deepEqual(JSON.parse(JSON.stringify(stored.sessions.a)), { top: true, quiet: true, color: 'blue' });
     assert.deepEqual(calls, [], 'activity preference never calls host Pin');
     assert.ok(host.querySelector('[data-activity-color="blue"]'));
     await open(); await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
     assert.equal(host.querySelector('[data-activity-color]'), null, 'selecting the active color again clears it');
-    assert.deepEqual(JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences')).sessions.a, { top: true, quiet: true }, 'clearing color preserves other Activity settings');
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { top: true, quiet: true }, 'clearing color preserves other Activity settings');
     await render();
     assert.equal(host.querySelector('[data-activity-top="true"]').querySelector('[data-dsh-nav-fold-session-id]').getAttribute('data-dsh-nav-fold-session-id'), 'a');
   });
+});
+
+test('Activity color persists through a new localhost port using the same Host profile value', async () => {
+  let persisted;
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); await flush(); });
+    persisted = app.form.getSnapshot().value.activityPreferences;
+    assert.equal(JSON.parse(persisted).sessions.a.color, 'blue', 'color is saved to Host, not merely localStorage');
+  }, { url: 'http://127.0.0.1:56029/' });
+  await withArchiveView({}, async ({ app, host }) => {
+    assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'), null, 'different origin has no old browser key');
+    assert.ok(host.querySelector('[data-activity-color="blue"]'), 'Host document restores the preference across browser origins');
+  }, { url: 'http://127.0.0.1:56030/', activityPreferences: persisted });
+});
+
+test('rapid Activity changes queue in order without dropping either color or Quiet', async () => {
+  await withArchiveView({}, async ({ app, host }) => {
+    const original = app.form.set.bind(app.form);
+    let release, first = true;
+    app.form.set = async (field, value) => {
+      if (field === 'activityPreferences' && first) { first = false; await new Promise(resolve => { release = resolve; }); }
+      return original(field, value);
+    };
+    try {
+      const menu = host.querySelector('[data-session-menu]');
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+      assert.ok(host.querySelector('[data-activity-color="blue"].dsh-nav-fold-session-quiet'), 'both pending changes preview together');
+    } finally { release?.(); }
+    await React.act(async () => { await flush(); await flush(); });
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { color: 'blue', quiet: true });
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 2, 'writes commit in order');
+  });
+});
+
+test('a rejected color write cannot leak into a later successful queued Quiet write', async () => {
+  await withArchiveView({}, async ({ app, host }) => {
+    const original = app.form.set.bind(app.form);
+    let release, first = true;
+    app.form.set = async (field, value) => {
+      if (field === 'activityPreferences' && first) { first = false; await new Promise(resolve => { release = resolve; }); return false; }
+      return original(field, value);
+    };
+    try {
+      const menu = host.querySelector('[data-session-menu]');
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+      await React.act(async () => { menu.click(); });
+      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+    } finally { release?.(); }
+    await React.act(async () => { await flush(); await flush(); });
+    assert.deepEqual(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a, { quiet: true });
+    assert.ok(!host.querySelector('[data-activity-color]'), 'rejected color does not reappear in later payload');
+    assert.ok(host.querySelector('.dsh-nav-fold-session-quiet'), 'successful later Quiet setting remains');
+  });
+});
+
+test('current-origin legacy Activity preferences migrate only when the Host field is uninitialized', async () => {
+  const legacy = JSON.stringify({ version: 1, sessions: { a: { quiet: true, color: 'green' } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { await flush(); });
+    assert.equal(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a.color, 'green');
+    assert.ok(host.querySelector('[data-activity-color="green"]'));
+    assert.equal(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'), legacy, 'old cache stays for rollback');
+  }, { legacyActivityPreferences: legacy, activityPreferences: '' });
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { await flush(); });
+    assert.ok(!host.querySelector('[data-activity-color]'), 'Host saved empty JSON wins over stale browser cache');
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 0, 'no repeated migration');
+  }, { legacyActivityPreferences: legacy, activityPreferences: '{"version":1,"sessions":{}}' });
 });
 
 test('choosing an Activity swatch restores focus to its row menu anchor', async () => {

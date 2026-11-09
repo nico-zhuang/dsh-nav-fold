@@ -28,6 +28,13 @@ test('hideBrandEnabled is an independent default-off persisted setting', () => {
   assert.equal(Config({ hideBrandEnabled: true }).workspaceViewsEnabled.get(), false);
 });
 
+test('Activity preferences use an uninitialized volatile Host profile string, not a browser-only key', () => {
+  assert.equal(Config({}).activityPreferences.get(), '');
+  assert.equal(Config.dict.activityPreferences.meta.default, '');
+  assert.equal(Config.dict.activityPreferences.meta.volatile, true);
+  assert.equal(Config({ activityPreferences: '{"version":1,"sessions":{}}' }).activityPreferences.get(), '{"version":1,"sessions":{}}');
+});
+
 test('package declares the official schema peer and settings client modules', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version, '0.4.13-preview.2');
