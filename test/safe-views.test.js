@@ -1481,6 +1481,8 @@ test('Activity cool palette uses Host light and dark modes with rollback-safe sl
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let root;
   try {
+    const sidebarRoot = app.doc.querySelector('.kB3qhq_root');
+    const ancestor = app.doc.createElement('div'); ancestor.className = 'host-dark'; sidebarRoot.before(ancestor); ancestor.append(sidebarRoot);
     app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', '#26394f');
     await flush(); app.doc.querySelector('[data-view="activity"]').click();
     const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
@@ -1500,6 +1502,27 @@ test('Activity cool palette uses Host light and dark modes with rollback-safe sl
     assert.equal(mark.style.backgroundColor, 'rgb(114, 202, 218)', 'Host dark overrides OS light/dark preference');
     assert.deepEqual(swatches().slice(1).map(node => node.style.getPropertyValue('--dsh-nav-fold-swatch')),
       ['#72cada', '#80afff', '#b09aff', '#cf9ceb', '#b2bac8']);
+    app.dom.window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+    await React.act(async () => { app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', '#263'); await flush(); });
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'explicit Host short-hex light text overrides dark OS');
+    mark.closest('.dsh-nav-fold-session').style.color = 'rgb(38, 57, 79)';
+    await React.act(async () => { app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', 'oklch(0.25 0.04 240)'); await flush(); });
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'unparsed modern Host token should fall through to computed row color before OS');
+    mark.closest('.dsh-nav-fold-session').style.removeProperty('color');
+    app.doc.querySelector('.kB3qhq_root').style.color = 'rgb(235, 240, 245)';
+    await React.act(async () => { app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', 'color(srgb 0.15 0.22 0.31)'); await flush(); });
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'Chromium color-mix serializes to color(srgb) and must honor Host light mode');
+    await React.act(async () => { app.doc.documentElement.style.setProperty('--dsw-alias-label-primary', 'oklch(0.25 0.04 240)'); await flush(); });
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'direct oklch Host text lightness wins over stale dark-mode root text');
+    const themeRule = app.doc.createElement('style');
+    themeRule.textContent = '.host-dark .kB3qhq_root{--dsw-alias-label-primary:#e8edf4}.host-light .kB3qhq_root{--dsw-alias-label-primary:#26394f}';
+    app.doc.head.append(themeRule);
+    await React.act(async () => { app.doc.documentElement.style.removeProperty('--dsw-alias-label-primary'); await flush(); });
+    assert.equal(app.dom.window.getComputedStyle(sidebarRoot).getPropertyValue('--dsw-alias-label-primary').trim(), '#e8edf4');
+    assert.equal(mark.style.backgroundColor, 'rgb(114, 202, 218)', 'nested Host dark theme is effective');
+    await React.act(async () => { ancestor.className = 'host-light'; await flush(); });
+    assert.equal(app.dom.window.getComputedStyle(sidebarRoot).getPropertyValue('--dsw-alias-label-primary').trim(), '#26394f');
+    assert.equal(mark.style.backgroundColor, 'rgb(7, 94, 130)', 'a themed ancestor between body and sidebar root must trigger refresh');
     assert.match(source, /\.dsh-nav-fold-session-quiet \.dsh-nav-fold-color-mark\s*\{[^}]*opacity:\s*\.85/);
     assert.equal(app.form.getSnapshot().value.activityPreferences, saved, 'theme and migration do not rewrite Host v1 preferences');
   } finally {
@@ -1536,6 +1559,106 @@ test('Activity top group contains only fixed rows and keeps Quiet in place', asy
     host = html();
     assert.equal(host.querySelector('[data-activity-top-group]'), null, 'native Favorites never inherits the Activity group');
   } finally { app.dispose(); }
+});
+
+test('Activity browse hold resets on external Host profile replacement but survives same-profile color edit', async () => {
+  const profileA = '{"version":1,"sessions":{}}';
+  const profileB = '{"version":1,"sessions":{"a":{"color":"rose"}}}';
+  const app = mount({ active: true, activityPreferences: profileA, uiWorkspace: { openSession() {} } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const ids = ['a', ...Array.from({ length: 21 }, (_, i) => `recent${i}`)];
+    const sessions = { ids, byId: Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: i ? 1000 - i : 20 }])) };
+    const statuses = new Map([['a', { completionUnread: true }]]);
+    const props = { useSessions: () => sessions, useSessionStatus: () => statuses, useWorkspaces: () => ({ items: [], pinnedSessionIds: [] }) };
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const render = async () => React.act(async () => { root ||= createRoot(host); root.render(React.createElement(View, props)); });
+    const visible = () => [...host.querySelectorAll('[data-dsh-nav-fold-session-id]')].map(node => node.dataset.dshNavFoldSessionId);
+    await render();
+    await React.act(async () => { host.querySelector('[data-dsh-nav-fold-session-id="a"]').click(); });
+    statuses.set('a', { completionUnread: false }); await render();
+    assert.equal(visible()[0], 'a', 'read A is held only for this browsing period');
+    await React.act(async () => { host.querySelector('[data-dsh-nav-fold-session-id="a"]').closest('.dsh-nav-fold-session').querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { host.querySelector('[data-activity-swatch="green"]').click(); await flush(); });
+    assert.equal(visible()[0], 'a', 'own Host-backed color change must not destroy browsing hold');
+    assert.equal(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a.color, 'green');
+    await React.act(async () => { app.form.publishValue({ activityPreferences: profileB }); await flush(); });
+    assert.equal(app.form.getSnapshot().value.activityPreferences, profileB, 'external profile B is now authoritative');
+    assert.deepEqual(visible().slice(0, 2), ['recent0', 'recent1'], 'profile B must recompute true rank and 20-recent cap without A hold');
+    assert.ok(!visible().includes('a'), 'profile A clicked row cannot leak visually into B');
+    assert.equal(app.form.setCalls.filter(([key]) => key === 'activityPreferences').length, 1, 'only user color action wrote Host');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+});
+
+test('Activity clicked unread rows keep browsing position until switching tabs', async () => {
+  const opened = [];
+  const app = mount({ active: true, uiWorkspace: { openSession: id => opened.push(id) } });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const ids = ['a', 'b', 'c', ...Array.from({ length: 21 }, (_, i) => `recent${i}`)];
+    const sessions = { ids, byId: Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: i < 3 ? 30 - i : 1000 - i }])) };
+    const statuses = new Map(['a', 'b', 'c'].map(id => [id, { completionUnread: true }]));
+    const props = { useSessions: () => sessions, useSessionStatus: () => statuses,
+      useWorkspaces: () => ({ items: [], pinnedSessionIds: ['a'], archivedSessionIds: [] }) };
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const render = async () => React.act(async () => { root ||= createRoot(host); root.render(React.createElement(View, props)); });
+    const visible = () => [...host.querySelectorAll('[data-dsh-nav-fold-session-id]')].map(button => button.dataset.dshNavFoldSessionId);
+    const open = async (id) => React.act(async () => { host.querySelector(`[data-dsh-nav-fold-session-id="${id}"]`).click(); });
+    await render(); assert.deepEqual(visible().slice(0, 3), ['a', 'b', 'c']);
+    await open('a'); sessions.byId.a.retainedBy = { mainView: 1 }; statuses.set('a', { completionUnread: false }); await render();
+    assert.deepEqual(visible().slice(0, 3), ['a', 'b', 'c'], 'A remains at the original green position instead of falling below recent cap');
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="a"][aria-current="page"]'), 'current session highlight follows Host main view');
+    assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="a"] [data-dsh-state-dot="done"]'), null, 'A actual unread dot clears immediately');
+    await open('b'); statuses.set('b', { completionUnread: false }); await render();
+    assert.deepEqual(visible().slice(0, 3), ['a', 'b', 'c'], 'subsequent B click preserves the first browsing queue');
+    assert.deepEqual(opened, ['a', 'b']);
+    statuses.set('a', { pendingInteraction: { kind: 'approval' } }); await render();
+    assert.equal(visible()[0], 'a', 'urgent approval moves immediately ahead of held B');
+    statuses.set('a', { completionUnread: false }); await render();
+    assert.deepEqual(visible().slice(0, 3), ['b', 'c', 'recent0'], 'old hold expires once A went through a new approval');
+    assert.ok(!visible().includes('a'), 'A may no longer bypass the recent cap after a second task lifecycle');
+    app.doc.querySelector('[data-view="favorites"]').click(); await render();
+    assert.deepEqual(visible(), ['a'], 'native Favorites still follows Host pins');
+    app.doc.querySelector('[data-view="activity"]').click(); await render();
+    assert.deepEqual(visible().slice(0, 3), ['c', 'recent0', 'recent1'], 'reentry recalculates rank and the 20-recent cap');
+    assert.ok(!visible().includes('a') && !visible().includes('b'), 'opened rows no longer bypass the cap after leaving');
+    await React.act(async () => {
+      host.querySelector('[data-dsh-nav-fold-session-id="c"]').click();
+      app.doc.querySelector('[data-view="favorites"]').click();
+      app.doc.querySelector('[data-view="activity"]').click();
+      statuses.set('c', { completionUnread: false });
+      root.render(React.createElement(View, props));
+    });
+    assert.ok(!visible().includes('c'), 'leaving synchronously before React commits must discard the former browse click');
+    assert.deepEqual(visible().slice(0, 2), ['recent0', 'recent1']);
+    statuses.set('a', { completionUnread: true }); statuses.set('b', { completionUnread: true }); await render();
+    await React.act(async () => {
+      host.querySelector('[data-dsh-nav-fold-session-id="a"]').click();
+      host.querySelector('[data-dsh-nav-fold-session-id="b"]').click();
+      app.doc.querySelector('[data-view="favorites"]').click();
+      app.doc.querySelector('[data-view="activity"]').click();
+      statuses.set('a', { completionUnread: false }); statuses.set('b', { completionUnread: false });
+      root.render(React.createElement(View, props));
+    });
+    assert.ok(!visible().includes('a') && !visible().includes('b'), 'both batched click updaters belong to the old Activity epoch');
+    assert.deepEqual(app.form.setCalls.filter(([key]) => key === 'activityPreferences'), [], 'in-memory browse hold never writes Host preferences');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
 });
 
 test('Quiet running session keeps its Activity row, is muted and can be restored inline without a manager', async () => {

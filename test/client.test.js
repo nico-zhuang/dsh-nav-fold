@@ -363,6 +363,35 @@ test('Activity uses host completionUnread without inventing unread for idle sess
   dispose();
 });
 
+test('Activity browse holds opened unread rows in place without changing true kinds or urgent ranks', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = ['a', 'b', 'c', ...Array.from({ length: 22 }, (_, i) => `recent${i}`)];
+    const list = { ids, byId: Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: i < 3 ? 30 - i : 1000 - i }])) };
+    const statuses = new Map(['a', 'b', 'c'].map(id => [id, { completionUnread: true }]));
+    const workspaces = { pinnedSessionIds: ['b'] };
+    const select = (hold, prefs = {}) => client.__test__.selectWorkspaceViews(list, statuses, workspaces, new Set(), 2, prefs, hold);
+    const initial = select();
+    assert.deepEqual(Array.from(initial.activity, row => row.id), ['a', 'b', 'c', 'recent0', 'recent1']);
+    const order = initial.activity.map(row => row.id);
+    statuses.set('a', { completionUnread: false });
+    let held = select({ ids: new Set(['a']), order });
+    assert.deepEqual(Array.from(held.activity, row => row.id), ['a', 'b', 'c', 'recent0', 'recent1']);
+    assert.equal(held.activity[0].kind, 'recent', 'Host read state updates immediately even while position holds');
+    statuses.set('b', { completionUnread: false });
+    held = select({ ids: new Set(['a', 'b']), order });
+    assert.deepEqual(Array.from(held.activity, row => row.id), ['a', 'b', 'c', 'recent0', 'recent1']);
+    assert.deepEqual(Array.from(held.activity.slice(0, 3), row => row.kind), ['recent', 'recent', 'unread']);
+    assert.deepEqual(Array.from(select().activity, row => row.id), ['c', 'recent0', 'recent1'], 'new browse recomputes true rank and recent cap');
+    statuses.set('b', { pendingInteraction: { kind: 'approval' } });
+    assert.deepEqual(Array.from(select({ ids: new Set(['a', 'b']), order }).activity.slice(0, 3), row => row.id), ['b', 'a', 'c'], 'new approval outranks held rows');
+    statuses.set('a', { running: true });
+    assert.deepEqual(Array.from(select({ ids: new Set(['a', 'b']), order }).activity.slice(0, 3), row => row.id), ['b', 'a', 'c'], 'new work uses real running rank');
+    assert.equal(select({ ids: new Set(['a', 'b']), order }, { recent21: { top: true } }).activity[0].id, 'recent21', 'explicit top placement always wins');
+    assert.deepEqual(Array.from(select().favorites, row => row.id), ['b'], 'native Favorites never gets a browse hold');
+  } finally { dispose(); }
+});
+
 test('workspace activity keeps real states while favorites follows native pins', () => {
   const { client, dispose } = start();
   const ids = ['waiting', 'running', 'unread', 'recent', 'favorite', 'archived', 'blank', 'child'];
