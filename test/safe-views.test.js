@@ -64,7 +64,7 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
       Menu: ({ anchor, children, open, onClose }) => React.createElement('span', null, anchor,
         open && React.createElement('div', { role: 'menu', onKeyDown: event => { if (event.key === 'Escape') onClose(); } }, children)),
       MenuItemButton: ({ icon, onSelect, children }) => React.createElement('button', { type: 'button', role: 'menuitem', onClick: onSelect },
-        icon && React.createElement('span', { 'data-menu-icon': '' }, icon), children),
+        icon && React.createElement('span', { 'data-menu-icon': '' }, icon), React.createElement('span', { 'data-menu-label': '' }, children)),
       IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
@@ -1066,8 +1066,15 @@ test('native session menu hands Activity and Favorites actions to the host', asy
         const organize = row.querySelector('[data-activity-organize]');
         assert.ok(organize, 'Activity has an organization control beside the native ellipsis');
         await React.act(async () => { organize.click(); });
-        assert.ok([...host.querySelectorAll('[role="menuitem"]')].some(item => /活跃置顶/.test(item.textContent)));
         assert.equal(host.querySelectorAll('[data-activity-swatch]').length, 6, 'native Activity organizer shows a two-row color grid');
+        const blue = host.querySelector('[data-activity-swatch="blue"]');
+        blue.focus();
+        await React.act(async () => { blue.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+        assert.equal(organize.getAttribute('aria-expanded'), 'false', 'Tab closes the swatch menu without selecting a color');
+        assert.ok(app.doc.activeElement === dots, 'Tab moves to the neighboring native action');
+        assert.equal(row.getAttribute('data-activity-color'), null, 'keyboard navigation does not change the marker');
+        await React.act(async () => { organize.click(); });
+        assert.ok([...host.querySelectorAll('[role="menuitem"]')].some(item => /固定在顶部/.test(item.textContent)), 'Activity-only placement is distinguished from native Pin');
         await React.act(async () => { organize.click(); });
       } else assert.equal(row.querySelector('[data-activity-organize], [data-activity-color]'), null, 'Favorites has no Activity actions');
       dots.getBoundingClientRect = () => ({ left: 12, bottom: 34 });
@@ -1161,10 +1168,15 @@ test('ellipsis menu opens safe session actions without activating the main row',
     await React.act(async () => { dots.click(); });
     let items = [...host.querySelectorAll('[role="menuitem"]')];
     assert.equal(items.length, 6, 'four legacy session actions remain alongside two icon-labeled Activity actions');
-    for (const label of ['打开会话', '收藏会话', '归档会话', '复制会话 ID', '活跃置顶', '免打扰'])
+    for (const label of ['打开会话', '收藏会话', '归档会话', '复制会话 ID', '固定在顶部', '免打扰'])
       assert.ok(items.some(item => item.textContent.includes(label)), `${label} is available without replacing existing actions`);
-    for (const label of ['活跃置顶', '免打扰'])
-      assert.ok(items.find(item => item.textContent.includes(label))?.querySelector('[data-menu-icon] svg'), `${label} has a distinct icon`);
+    for (const label of ['固定在顶部', '免打扰']) {
+      const item = items.find(button => button.textContent.includes(label));
+      assert.ok(item, `${label} exists`);
+      const content = item.lastElementChild?.querySelector('[data-activity-item-content]');
+      assert.ok(item.lastElementChild?.matches('[data-menu-label]') && content?.lastElementChild?.matches('[data-activity-action-icon]') && content.lastElementChild.querySelector('svg'), `${label} has an SVG at the right of its text inside Host itemLabel`);
+      assert.equal(item.querySelector('[data-menu-icon]'), null, 'Host default left-side icon is intentionally not used');
+    }
     const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
     assert.deepEqual(swatches.map(button => button.getAttribute('data-activity-swatch')), ['none', 'blue', 'green', 'amber', 'rose', 'violet']);
     assert.ok(swatches.every(button => button.getAttribute('role') === 'menuitemradio' && button.getAttribute('aria-label') && button.title && !button.disabled));
@@ -1499,10 +1511,13 @@ test('Activity organize menu persists independent top, quiet and color without t
       assert.ok(item, `Activity action ${label} exists`);
       await React.act(async () => { item.click(); });
     };
-    await open(); await choose('活跃置顶');
+    await open(); await choose('固定在顶部');
     assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="a"]').closest('.dsh-nav-fold-session').getAttribute('data-activity-top'), 'true');
     await open(); await choose('免打扰');
-    await open(); await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+    await open();
+    const blue = host.querySelector('[data-activity-swatch="blue"]'); blue.focus();
+    await React.act(async () => { blue.click(); });
+    assert.ok(app.doc.activeElement === host.querySelector('[data-session-menu]'), 'selecting a swatch returns keyboard focus to the menu anchor');
     const stored = JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'));
     assert.deepEqual(JSON.parse(JSON.stringify(stored.sessions.a)), { top: true, quiet: true, color: 'blue' });
     assert.deepEqual(calls, [], 'activity preference never calls host Pin');
@@ -1512,5 +1527,16 @@ test('Activity organize menu persists independent top, quiet and color without t
     assert.deepEqual(JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences')).sessions.a, { top: true, quiet: true }, 'clearing color preserves other Activity settings');
     await render();
     assert.equal(host.querySelector('[data-activity-top="true"]').querySelector('[data-dsh-nav-fold-session-id]').getAttribute('data-dsh-nav-fold-session-id'), 'a');
+  });
+});
+
+test('choosing an Activity swatch restores focus to its row menu anchor', async () => {
+  await withArchiveView({}, async ({ app, host }) => {
+    const anchor = host.querySelector('[data-session-menu]');
+    await React.act(async () => { anchor.click(); });
+    const blue = host.querySelector('[data-activity-swatch="blue"]'); blue.focus();
+    await React.act(async () => { blue.click(); });
+    assert.ok(app.doc.activeElement === anchor, 'closing the color menu never strands keyboard focus on BODY');
+    assert.equal(host.querySelector('[data-activity-color="blue"]') !== null, true);
   });
 });
