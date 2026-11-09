@@ -1214,7 +1214,7 @@ test('failed unpin leaves the favorite pressed and offers retry', async () => {
   }
 });
 
-test('native session menu reserves only one 24px ellipsis while legacy retains three controls', async () => {
+test('native Activity places organization beside Host ellipsis in its positioned action strip while legacy retains three controls', async () => {
   const app = mount({ active: true, nativeBuild: 'rc1', contextMenus: {
     open() {}, close() {}, active: { getSnapshot: () => null },
   } });
@@ -1231,8 +1231,10 @@ test('native session menu reserves only one 24px ellipsis while legacy retains t
       ...props, useContextMenu: () => ({ getTriggerProps: () => ({}) }),
     })); });
     const row = host.querySelector('.dsh-nav-fold-session');
-    assert.equal(row.querySelectorAll('.dsh-nav-fold-session-actions button').length, 1);
-    assert.equal(row.querySelector('.dsh-nav-fold-session-actions button').hasAttribute('data-session-menu'), true);
+    assert.equal(row.querySelectorAll('.dsh-nav-fold-session-actions button').length, 2, 'native Activity contains both independent actions in one positioned strip');
+    assert.ok(row.querySelector('.dsh-nav-fold-session-actions [data-session-menu]'), 'Host ellipsis is retained');
+    assert.ok(row.querySelector('.dsh-nav-fold-session-actions [data-activity-organize]'), 'Activity organizer anchors inside strip, not a flow-level Menu wrapper');
+    assert.equal(row.lastElementChild.className, 'dsh-nav-fold-session-actions', 'Menu wrapper cannot expand the row flow');
     assert.match(row.className, /dsh-nav-fold-session-native/);
     assert.match(source, /\.dsh-nav-fold-session-native\s+\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*(?:2[4-9]|3[0-2])px/);
     assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
@@ -1251,6 +1253,12 @@ test('session actions reserve title space and reveal on hover, focus or touch', 
   assert.match(source, /\.dsh-nav-fold-session:hover\s+\.dsh-nav-fold-session-actions,\s*\.dsh-nav-fold-session:focus-within\s+\.dsh-nav-fold-session-actions/);
   assert.match(source, /@media\s*\(hover:\s*none\)\s*\{\s*\.dsh-nav-fold-session-actions\s*\{[^}]*opacity:\s*1/);
   assert.match(source, /\.dsh-nav-fold-session-actions\s+button:focus-visible\s*\{[^}]*outline:/);
+});
+
+test('two-line Activity and Favorites rows use compact padding without shrinking action hit targets', () => {
+  assert.match(source, /\.dsh-nav-fold-session-main\s*\{[^}]*padding:\s*5px 10px/);
+  assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
+  assert.match(source, /\.dsh-nav-fold-activity-organize\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
 });
 
 test('reduced motion disables the action strip fade', () => {

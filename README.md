@@ -1,4 +1,4 @@
-# dsh-nav-fold · v0.4.13-preview.1（本机试用，未发布）
+# dsh-nav-fold · v0.4.13-preview.2（本机试用，未发布）
 
 > 一个插件整理 DSH 左侧栏：收起全局导航、按需开启工作区三栏，并用自定义入口快捷键进入文件夹／会话焦点导航。也可通过「无线麦」映射小米蓝牙遥控器按键；Fold 不直接连接蓝牙设备。macOS 顶部 Logo 隐藏功能收录并适配 [stoner-byte 的 dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand)（MIT）。
 
