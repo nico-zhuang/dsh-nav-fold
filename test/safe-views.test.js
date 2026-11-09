@@ -63,7 +63,8 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
       StateDot: ({ state }) => React.createElement('i', { 'data-dsh-state-dot': state }),
       Menu: ({ anchor, children, open, onClose }) => React.createElement('span', null, anchor,
         open && React.createElement('div', { role: 'menu', onKeyDown: event => { if (event.key === 'Escape') onClose(); } }, children)),
-      MenuItemButton: ({ onSelect, children }) => React.createElement('button', { type: 'button', role: 'menuitem', onClick: onSelect }, children),
+      MenuItemButton: ({ icon, onSelect, children }) => React.createElement('button', { type: 'button', role: 'menuitem', onClick: onSelect },
+        icon && React.createElement('span', { 'data-menu-icon': '' }, icon), children),
       IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
@@ -1066,6 +1067,7 @@ test('native session menu hands Activity and Favorites actions to the host', asy
         assert.ok(organize, 'Activity has an organization control beside the native ellipsis');
         await React.act(async () => { organize.click(); });
         assert.ok([...host.querySelectorAll('[role="menuitem"]')].some(item => /活跃置顶/.test(item.textContent)));
+        assert.equal(host.querySelectorAll('[data-activity-swatch]').length, 6, 'native Activity organizer shows a two-row color grid');
         await React.act(async () => { organize.click(); });
       } else assert.equal(row.querySelector('[data-activity-organize], [data-activity-color]'), null, 'Favorites has no Activity actions');
       dots.getBoundingClientRect = () => ({ left: 12, bottom: 34 });
@@ -1158,9 +1160,18 @@ test('ellipsis menu opens safe session actions without activating the main row',
     assert.equal(dots.getAttribute('aria-haspopup'), 'menu');
     await React.act(async () => { dots.click(); });
     let items = [...host.querySelectorAll('[role="menuitem"]')];
-    assert.equal(items.length, 12, 'four original Host actions remain alongside eight Activity-only organization actions');
-    for (const label of ['打开会话', '收藏会话', '归档会话', '复制会话 ID', '活跃置顶', '免打扰', '无色', '蓝色'])
+    assert.equal(items.length, 6, 'four legacy session actions remain alongside two icon-labeled Activity actions');
+    for (const label of ['打开会话', '收藏会话', '归档会话', '复制会话 ID', '活跃置顶', '免打扰'])
       assert.ok(items.some(item => item.textContent.includes(label)), `${label} is available without replacing existing actions`);
+    for (const label of ['活跃置顶', '免打扰'])
+      assert.ok(items.find(item => item.textContent.includes(label))?.querySelector('[data-menu-icon] svg'), `${label} has a distinct icon`);
+    const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
+    assert.deepEqual(swatches.map(button => button.getAttribute('data-activity-swatch')), ['none', 'blue', 'green', 'amber', 'rose', 'violet']);
+    assert.ok(swatches.every(button => button.getAttribute('role') === 'menuitemradio' && button.getAttribute('aria-label') && button.title && !button.disabled));
+    assert.equal(swatches[0].getAttribute('aria-checked'), 'true', 'no color is a selected actionable swatch');
+    assert.ok(swatches[0].querySelector('[data-activity-no-color-icon] svg'), 'no-color has a slashed mark icon');
+    swatches[0].focus(); swatches[0].dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
+    assert.equal(app.doc.activeElement, swatches[1], 'keyboard arrows move through the swatch grid');
     assert.deepEqual(calls, [], 'opening menu does not open the conversation');
     await React.act(async () => { items.find(item => /复制会话 ID/.test(item.textContent)).click(); await flush(); });
     assert.deepEqual(calls, [['copy', 'a']]);
@@ -1419,7 +1430,19 @@ test('archive controls reserve three targets at 220px without hover layout shift
   assert.match(source, /@media\s*\(hover:\s*none\)[^\n]*\.dsh-nav-fold-session-actions/);
 });
 
-test('Quiet running session that falls past recent cap remains recoverable from Activity management', async () => {
+test('A left stripe spans the compact row while Quiet stays actionable', () => {
+  const stripe = source.match(/\.dsh-nav-fold-color-mark\s*\{([^}]*)\}/)?.[1] || '';
+  const quietMain = source.match(/\.dsh-nav-fold-session-quiet\s+\.dsh-nav-fold-session-main\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(stripe, /left:\s*3px;[^}]*top:\s*4px;[^}]*bottom:\s*4px;[^}]*width:\s*3px/);
+  assert.match(quietMain, /color:/);
+  const grid = source.match(/\.dsh-nav-fold-color-grid\s*\{([^}]*)\}/)?.[1] || '';
+  const swatch = source.match(/\.dsh-nav-fold-color-swatch\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(grid, /display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3,\s*32px\)/);
+  assert.match(swatch, /width:\s*32px;[^}]*height:\s*32px/);
+  assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
+});
+
+test('Quiet running session keeps its Activity row, is muted and can be restored inline without a manager', async () => {
   const app = mount({ active: true });
   const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
   globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -1437,14 +1460,15 @@ test('Quiet running session that falls past recent cap remains recoverable from 
     assert.ok(busy, 'running row starts visible');
     await React.act(async () => { busy.closest('.dsh-nav-fold-session').querySelector('[data-session-menu]').click(); });
     await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
-    assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'), null, 'quiet row beyond recent cap leaves main Activity');
-    const manage = host.querySelector('[data-activity-quiet-manage]');
-    assert.ok(manage, 'quiet session remains discoverable from Activity');
-    await React.act(async () => { manage.click(); });
-    const restore = host.querySelector('[data-activity-quiet-restore="busy"]');
-    assert.ok(restore, 'management exposes a direct cancel action');
-    await React.act(async () => { restore.click(); });
-    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'), 'restored running session returns to main Activity');
+    const quiet = host.querySelector('[data-dsh-nav-fold-session-id="busy"]')?.closest('.dsh-nav-fold-session');
+    assert.ok(quiet, 'Quiet does not demote a running session past the recent cap');
+    assert.match(quiet.className, /dsh-nav-fold-session-quiet/);
+    assert.ok(quiet.querySelector('[data-activity-quiet-icon]'), 'muted row shows a small moon');
+    assert.equal(host.querySelector('[data-activity-quiet-manage]'), null, 'no separate management header');
+    await React.act(async () => { quiet.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '取消免打扰').click(); });
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'));
+    assert.equal(host.querySelector('[data-activity-quiet-icon]'), null, 'restored row has its real running indicator');
   } finally {
     if (root) await React.act(async () => root.unmount());
     globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
@@ -1452,16 +1476,15 @@ test('Quiet running session that falls past recent cap remains recoverable from 
   }
 });
 
-test('Quiet management explains local save failure instead of silently claiming persistence', async () => {
+test('Quiet menu action reports local save failure without a management header', async () => {
   await withArchiveView({}, async ({ app, host }) => {
-    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
-    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
-    await React.act(async () => { host.querySelector('[data-activity-quiet-manage]').click(); });
     const storagePrototype = Object.getPrototypeOf(app.dom.window.localStorage);
     const descriptor = Object.getOwnPropertyDescriptor(storagePrototype, 'setItem');
     Object.defineProperty(storagePrototype, 'setItem', { configurable: true, value() { throw Error('quota'); } });
     try {
-      await React.act(async () => { host.querySelector('[data-activity-quiet-restore="a"]').click(); });
+      await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+      await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+      assert.equal(host.querySelector('[data-activity-quiet-manage]'), null);
       assert.match(host.querySelector('[data-dsh-workspace-view="activity"] [role="alert"]')?.textContent || '', /未能保存/);
     } finally { Object.defineProperty(storagePrototype, 'setItem', descriptor); }
   });
@@ -1479,11 +1502,14 @@ test('Activity organize menu persists independent top, quiet and color without t
     await open(); await choose('活跃置顶');
     assert.equal(host.querySelector('[data-dsh-nav-fold-session-id="a"]').closest('.dsh-nav-fold-session').getAttribute('data-activity-top'), 'true');
     await open(); await choose('免打扰');
-    await open(); await choose('蓝色');
+    await open(); await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
     const stored = JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences'));
     assert.deepEqual(JSON.parse(JSON.stringify(stored.sessions.a)), { top: true, quiet: true, color: 'blue' });
     assert.deepEqual(calls, [], 'activity preference never calls host Pin');
     assert.ok(host.querySelector('[data-activity-color="blue"]'));
+    await open(); await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); });
+    assert.equal(host.querySelector('[data-activity-color]'), null, 'selecting the active color again clears it');
+    assert.deepEqual(JSON.parse(app.dom.window.localStorage.getItem('dsh-nav-fold:activity-preferences')).sessions.a, { top: true, quiet: true }, 'clearing color preserves other Activity settings');
     await render();
     assert.equal(host.querySelector('[data-activity-top="true"]').querySelector('[data-dsh-nav-fold-session-id]').getAttribute('data-dsh-nav-fold-session-id'), 'a');
   });

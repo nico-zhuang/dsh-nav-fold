@@ -326,7 +326,7 @@ test('Activity top pin is separate from Favorites and bypasses the recent cap', 
   } finally { dispose(); }
 });
 
-test('Activity quiet running session is sorted and capped as recent without falsifying Host status', () => {
+test('Activity Quiet keeps real running rank and unchanged recent cap without falsifying Host status', () => {
   const { client, dispose } = start();
   try {
     const ids = ['busy', 'a', 'b'];
@@ -334,7 +334,9 @@ test('Activity quiet running session is sorted and capped as recent without fals
     const list = { ids, byId };
     const statuses = new Map([['busy', { running: true }]]);
     const quiet = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set(), 2, { busy: { quiet: true } });
-    assert.deepEqual(quiet.activity.map(row => row.id), ['a', 'b']);
+    assert.deepEqual(quiet.activity.map(row => row.id), ['busy', 'a', 'b'], 'Quiet dims in place instead of dropping a running conversation');
+    const capped = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set(), 1, { busy: { quiet: true } });
+    assert.deepEqual(capped.activity.map(row => row.id), ['busy', 'a'], 'ordinary recent cap is unchanged');
     assert.equal(statuses.get('busy').running, true);
     const top = client.__test__.selectWorkspaceViews(list, statuses, {}, new Set(), 2, { busy: { quiet: true, top: true } });
     assert.deepEqual(top.activity.map(row => row.id), ['busy', 'a', 'b']);
