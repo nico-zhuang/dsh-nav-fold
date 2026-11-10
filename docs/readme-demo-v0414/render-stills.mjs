@@ -1,9 +1,9 @@
 // Capture only the offline, synthetic preview; never connect to a running DSH instance.
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, realpath, lstat, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, realpath, lstat, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const steps = ['fold', 'views', 'organize', 'navigate', 'logo'];
@@ -41,6 +41,19 @@ const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chro
   '--disable-sync', '--disable-default-apps', '--no-pings', '--hide-scrollbars',
   '--remote-debugging-port=0', `--user-data-dir=${join(scratch, 'chrome-profile')}`, 'about:blank',
 ], { stdio: ['ignore', 'ignore', 'pipe'] });
+// Observe exit immediately so cleanup cannot miss a fast failure or early exit.
+const chromeExit = new Promise((finish) => {
+  chrome.once('exit', (code, signal) => finish({ code, signal }));
+  chrome.once('error', (error) => finish({ spawnError: error.message }));
+});
+async function bounded(promise, milliseconds, diagnostic) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Error(diagnostic)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 let socket;
 try {
   const address = await new Promise((resolveAddress, reject) => {
@@ -55,20 +68,28 @@ try {
     chrome.on('exit', (code) => { clearTimeout(timer); reject(Error(`Chrome exited before CDP startup (${code}): ${stderr.slice(-1200)}`)); });
   });
   socket = new WebSocket(address);
-  await new Promise((resolveOpen, reject) => { socket.onopen = resolveOpen; socket.onerror = reject; });
+  await bounded(new Promise((resolveOpen, reject) => { socket.onopen = resolveOpen; socket.onerror = reject; }),
+    10_000, 'CDP socket connection timed out');
   let id = 0;
   const pending = new Map();
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (!message.id) return;
     const waiter = pending.get(message.id);
+    if (!waiter) return; // Ignore a late reply after its bounded request expired.
     pending.delete(message.id);
+    clearTimeout(waiter.timer);
     message.error ? waiter.reject(Error(JSON.stringify(message.error))) : waiter.resolve(message.result);
   };
   const send = (method, params = {}, sessionId) => new Promise((resolveCall, reject) => {
     const request = ++id;
-    pending.set(request, { resolve: resolveCall, reject });
-    socket.send(JSON.stringify({ id: request, method, params, ...(sessionId ? { sessionId } : {}) }));
+    const timer = setTimeout(() => {
+      pending.delete(request);
+      reject(Error(`CDP request timed out: ${method}`));
+    }, 15_000);
+    pending.set(request, { resolve: resolveCall, reject, timer });
+    try { socket.send(JSON.stringify({ id: request, method, params, ...(sessionId ? { sessionId } : {}) })); }
+    catch (error) { clearTimeout(timer); pending.delete(request); reject(error); }
   });
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
@@ -106,5 +127,24 @@ try {
   console.log(`Rendered ${states.length} offline synthetic stills at 960×540; total ${totalBytes} bytes`);
 } finally {
   socket?.close();
-  chrome.kill();
+  if (chrome.exitCode === null && chrome.signalCode === null) chrome.kill('SIGTERM');
+  let exit;
+  try {
+    exit = await bounded(chromeExit, 8_000,
+      `Chrome did not exit within 8 seconds after SIGTERM; scratch retained at ${scratch}`);
+  } catch (error) {
+    // Do not delete a directory that Chrome may still be using, or force-kill it.
+    console.error(error.message);
+    chrome.unref();
+    chrome.stderr.destroy();
+    throw error;
+  }
+  const cleanupTarget = await realpath(scratch);
+  const realTemp = await realpath(tmpdir());
+  assert.equal(scratch, join(tmpdir(), basename(scratch)), 'cleanup must match this process mkdtemp return value');
+  assert.equal(cleanupTarget, join(realTemp, basename(scratch)), 'cleanup must resolve to the same new scratch');
+  assert.equal(dirname(cleanupTarget), realTemp, 'cleanup must be a direct child of the real temp directory');
+  assert(basename(cleanupTarget).startsWith('navfold-v0414-stills-'), 'cleanup requires the renderer scratch prefix');
+  await rm(cleanupTarget, { recursive: true });
+  console.log(`Scratch cleaned after Chrome exit ${JSON.stringify(exit)}: ${cleanupTarget}`);
 }

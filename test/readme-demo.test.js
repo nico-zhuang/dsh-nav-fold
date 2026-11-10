@@ -1,4 +1,7 @@
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,6 +47,20 @@ test('all twelve deterministic states have legible WebP stills', () => {
     assert.ok(statSync(image).size > 10_000, `${step}-${phase} must exceed 10 KB`);
   }
   window.close();
+});
+
+test('renderer leaves no new scratch directory and reproduces all twelve stills', () => {
+  const scratchNames = () => readdirSync(tmpdir()).filter((name) => name.startsWith('navfold-v0414-stills-')).sort();
+  const hashes = () => stillStates.map(([step, phase]) =>
+    createHash('sha256').update(readFileSync(new URL(`${step}-${phase}.webp`, stillDirectory))).digest('hex'));
+  const beforeScratch = scratchNames();
+  const beforeImages = hashes();
+  const renderer = fileURLToPath(new URL('../docs/readme-demo-v0414/render-stills.mjs', import.meta.url));
+  const output = execFileSync(process.execPath, [renderer], { encoding: 'utf8', timeout: 90_000 });
+  assert.match(output, /Rendered 12 offline synthetic stills at 960×540/);
+  assert.match(output, /Scratch cleaned after Chrome exit .*navfold-v0414-stills-/);
+  assert.deepEqual(scratchNames(), beforeScratch, 'this run must not leave a Chrome profile or PNGs in temp or delete older scratch');
+  assert.deepEqual(hashes(), beforeImages, 'rendering must reproduce every committed image byte-for-byte');
 });
 
 test('fold collapses six global labels without removing new session and workspace', () => {
