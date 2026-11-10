@@ -1772,6 +1772,43 @@ test('custom HEX Host v1 slot renders literally and survives ordinary preset and
   }, { activityPreferences: original });
 });
 
+test('restored custom HEX color keeps no-color as keyboard entry without claiming it selected', async () => {
+  const original = JSON.stringify({ version: 1, customColor: '#C68AE2', sessions: { a: { color: '#C68AE2' } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
+    assert.deepEqual(swatches.map(button => button.tabIndex), [0, -1, -1, -1, -1, -1]);
+    assert.ok(swatches.every(button => button.getAttribute('aria-checked') === 'false'), 'HEX does not select a preset');
+    swatches[0].focus();
+    await React.act(async () => { swatches[0].dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })); });
+    assert.equal(app.doc.activeElement, swatches[1], 'old 2×3 arrow traversal still works from the fallback');
+    const tab = new app.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await React.act(async () => { swatches[1].dispatchEvent(tab); });
+    assert.equal(tab.defaultPrevented, true, 'Tab exits the grid rather than moving to another swatch');
+    assert.equal(host.querySelector('[role="menu"]'), null, 'Tab closes the Activity menu');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, original, 'keyboard traversal does not write');
+  }, { activityPreferences: original });
+});
+
+test('Host set true without matching authoritative snapshot rolls back Activity preview', async () => {
+  const original = JSON.stringify({ version: 1, customColor: '#C68AE2', sessions: { a: { color: '#C68AE2', top: true } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    const nativeSet = app.form.set.bind(app.form);
+    app.form.set = async (field, value) => field === 'activityPreferences' ? true : nativeSet(field, value);
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); await flush(); });
+    assert.equal(app.form.getSnapshot().value.activityPreferences, original, 'the Host document remains authoritative');
+    assert.ok(host.querySelector('[data-activity-color="#C68AE2"]'), 'unconfirmed blue preview must roll back');
+    assert.match(host.querySelector('[role="alert"]')?.textContent || '', /未能保存/, 'false confirmation reports a retryable failure');
+    app.form.set = nativeSet;
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); await flush(); });
+    const saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.deepEqual(saved.sessions.a, { color: '#C68AE2', top: true, quiet: true }, 'later writes cannot reuse unconfirmed blue');
+    assert.equal(saved.customColor, '#C68AE2');
+  }, { activityPreferences: original });
+});
+
 test('Activity color persists through a new localhost port using the same Host profile value', async () => {
   let persisted;
   await withArchiveView({}, async ({ app, host }) => {
