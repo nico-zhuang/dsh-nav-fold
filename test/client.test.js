@@ -6,17 +6,18 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.13 GitHub release declares shortcuts and required client modules', () => {
+test('v0.4.14 GitHub release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.13', 'formal GitHub asset must not reuse the locally installed preview.4 version');
+  assert.equal(manifest.version, '0.4.14', 'publish the shortcut changes under a distinct version from v0.4.13');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
   const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.13（正式版）$/);
-  assert.match(readme, /releases\/download\/v0\.4\.13\/dsh-nav-fold-0\.4\.13\.tgz/);
+  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.14（正式版）$/);
+  assert.match(readme, /releases\/download\/v0\.4\.14\/dsh-nav-fold-0\.4\.14\.tgz/);
   const activityNotes = readme.split('### 活跃列表专属整理（v0.4.13）')[1]?.split('\n### ')[0] || '';
   assert.doesNotMatch(activityNotes, /未发布|本机试用|当前公开 v0\.4\.12 Release 不包含/);
   assert.match(activityNotes, /固定在顶部/);
@@ -85,6 +86,7 @@ function start(html = navigation(), savedState, savedOrder, setup) {
   assert.equal(bundle.id, 'dsh-nav-fold');
   const client = bundle.factory((id) => { if (id === 'react') return React; if (id === '@deepseek-ai/dsh-client-ui-primitives') return {
     StateDot: ({ state }) => React.createElement('span', { 'data-host-state-dot': state }),
+    ShortcutKeys: ({ keys }) => React.createElement('kbd', { 'data-host-shortcut-keys': '' }, JSON.stringify(keys)),
     Menu: ({ anchor, children, open }) => React.createElement('span', null, anchor, open && React.createElement('span', { role: 'menu' }, children)),
     MenuItemButton: ({ onSelect, children }) => React.createElement('button', { type: 'button', onClick: onSelect }, children),
     IconEllipsisOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
@@ -859,32 +861,43 @@ test('Chinese nav label also matched without touching unrelated nav', () => {
 });
 
 function shortcutFixture() {
-  let command;
+  const commands = new Map();
   let released = false, registrations = 0, releases = 0;
-  return { shortcuts: { register(value) { command = value; registrations++; return () => { command = undefined; released = true; releases++; }; } },
-    get command() { return command; }, get released() { return released; }, get registrations() { return registrations; }, get releases() { return releases; } };
+  let rows = [];
+  const listeners = new Set();
+  return { shortcuts: {
+    register(value) { commands.set(value.id, value); registrations++; return () => { commands.delete(value.id); released = true; releases++; }; },
+    catalog: { getSnapshot: () => rows, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); } },
+  },
+    get command() { return commands.get('dsh-nav-fold.session-navigation'); },
+    get organize() { return commands.get('dsh-nav-fold.activity-organize'); },
+    publish(next) { rows = next; for (const listener of listeners) listener(); },
+    get released() { return released; }, get registrations() { return registrations; }, get releases() { return releases; },
+    get listenerCount() { return listeners.size; } };
 }
 
-test('saved navigation switch releases active focus and shortcut without disabling workspace views', async () => {
+test('saved navigation switch releases active focus but keeps registered shortcuts for native editing', async () => {
   const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
   const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
     sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
   try {
     doc.querySelector('#workspaces').innerHTML = '<div role="treeitem" data-row-key="session:current" aria-selected="true">Current</div>';
-    assert.equal(shortcut.registrations, 1, 'legacy saved workspace views keep navigation available');
+    assert.equal(shortcut.registrations, 2, 'both native commands register without changing saved settings');
     assert.deepEqual(Object.keys(shortcut.command.defaults), [], 'no default key steals an existing binding');
     shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
     assert.ok(doc.querySelector('[data-dsh-nav-fold-navigation]'));
     form.acceptNavigation(false);
     assert.equal(doc.querySelector('[data-dsh-nav-fold-navigation]'), null);
-    assert.equal(shortcut.command, undefined, 'disabled navigation is unregistered');
-    assert.equal(shortcut.releases, 1);
+    assert.ok(shortcut.command, 'disabled navigation remains listed for native shortcut editing');
+    assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'pass');
+    assert.equal(shortcut.releases, 0);
     assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'three workspace views remain enabled');
     form.acceptNavigation(true);
-    assert.equal(shortcut.registrations, 2);
+    assert.equal(shortcut.registrations, 2, 'commands keep a stable catalog identity across setting changes');
     assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'handled');
     form.accept(false);
-    assert.equal(shortcut.command, undefined, 'disabled workspace views also release navigation');
+    assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'pass');
+    assert.ok(shortcut.organize, 'organizer command remains visible while views are disabled');
   } finally { fixture.dispose(); dispose(); }
 });
 
@@ -1024,6 +1037,104 @@ test('entry expands the narrow sidebar before focusing a session row', () => {
     assert.equal(root.classList.contains('kB3qhq_collapsed'), false);
     assert.equal(doc.activeElement.textContent, 'Native');
   } finally { fixture.dispose(); dispose(); }
+});
+
+test('Activity organizer shortcut uses only the focused Activity session and its own menu button', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession() { assert.fail('organizing cannot open a session'); } }, configForms: configForms(form) }));
+  const region = doc.querySelector('#workspaces');
+  const clicks = [];
+  const resolve = (target = doc.activeElement, modal = null) => shortcut.organize.resolve({ region: 'page', modal, target });
+  try {
+    assert.equal(shortcut.organize.id, 'dsh-nav-fold.activity-organize');
+    assert.deepEqual(Object.keys(shortcut.organize.defaults), [], 'organizer has no preemptive key binding');
+    doc.querySelector('[data-view="activity"]').click();
+    region.innerHTML = '<section data-dsh-workspace-view="activity"><div class="dsh-nav-fold-session"><button data-dsh-nav-fold-session-id="a">A</button><button data-activity-organize>Organize A</button><button data-session-menu>Native A</button></div><div class="dsh-nav-fold-session"><button data-dsh-nav-fold-session-id="b" aria-current="page">B</button><button data-activity-organize>Organize B</button></div></section>';
+    const [first, second] = [...region.querySelectorAll('[data-dsh-nav-fold-session-id]')];
+    region.querySelectorAll('[data-activity-organize], [data-session-menu]').forEach(button => button.addEventListener('click', () => clicks.push(button.textContent)));
+    first.focus();
+    assert.equal(resolve().status, 'handled'); resolve().run();
+    assert.deepEqual(clicks, ['Organize A']);
+    const outside = doc.createElement('button'); doc.body.append(outside); outside.focus();
+    assert.equal(resolve().status, 'pass', 'selected or current session is not implicit keyboard focus');
+    assert.equal(resolve(first, 'settings').status, 'pass', 'modal prevents organizer action');
+    assert.equal(shortcut.organize.resolve({ region: 'terminal', modal: null, target: first }).status, 'pass', 'desktop priority mode must not activate in terminal');
+    second.focus(); resolve().run(); assert.deepEqual(clicks, ['Organize A', 'Organize B']);
+    second.closest('.dsh-nav-fold-session').querySelector('[data-activity-organize]').remove();
+    assert.equal(resolve().status, 'pass', 'missing organizer never falls back to native ellipsis');
+    first.focus(); doc.querySelector('[data-view="favorites"]').click();
+    assert.equal(resolve(first).status, 'pass', 'a stale Activity focus cannot organize outside Activity view');
+    assert.deepEqual(clicks, ['Organize A', 'Organize B']);
+  } finally { fixture.dispose(); dispose(); }
+  assert.equal(shortcut.releases, 2, 'both commands are disposed with the plugin');
+});
+
+test('rc5 Activity shortcut opens the focused row own legacy menu with Activity actions', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const opened = [];
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: { openSession(id) { opened.push(id); } }, configForms: configForms(form) }));
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = dom.window; globalThis.document = doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let root;
+  try {
+    doc.querySelector('[data-view="activity"]').click();
+    const View = fixture.entries.get('sidebar.workspaces').component;
+    const host = doc.createElement('div'); doc.querySelector('#workspaces').append(host);
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
+      useSessions: () => ({ ids: ['a'], byId: { a: { id: 'a', title: 'Session A' } } }),
+      useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a'] }], pinnedSessionIds: [] }),
+    })); });
+    const row = host.querySelector('.dsh-nav-fold-session');
+    const focused = row.querySelector('[data-dsh-nav-fold-session-id="a"]');
+    focused.focus();
+    const result = shortcut.organize.resolve({ region: 'page', modal: null, target: focused });
+    assert.equal(result.status, 'handled', 'rc5 should use its own Activity menu, not a nonexistent rc1-only organizer');
+    await React.act(async () => { result.run(); });
+    assert.ok(host.querySelector('[role="menu"]')?.textContent.includes('固定在顶部'), 'legacy menu contains Activity organization actions');
+    assert.deepEqual(opened, [], 'opening organization does not open the session');
+    assert.equal(row.querySelector('[data-session-menu]').hasAttribute('data-activity-organize'), true, 'only Activity legacy anchor is eligible');
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    fixture.dispose(); dispose();
+  }
+});
+
+test('plugin settings reflect live native shortcut catalog keys for both commands', async () => {
+  const fixture = slotFixture(); const form = settingsForm(true); const shortcut = shortcutFixture();
+  const { doc, dom, dispose } = start(workspaceSidebar(), undefined, undefined, () => ({ slots: fixture.slots, shortcuts: shortcut.shortcuts,
+    sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = dom.window; globalThis.document = doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const host = doc.createElement('div'); doc.body.append(host);
+  let root;
+  try {
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(fixture.entries.get('plugins.bundle.config').component, { view: 'page' })); });
+    const nav = host.querySelector('[data-dsh-nav-fold-binding="session-navigation"]');
+    const organize = host.querySelector('[data-dsh-nav-fold-binding="activity-organize"]');
+    assert.ok(nav && organize, 'both registered commands have settings status');
+    assert.match(nav.textContent, /会话导航.*未绑定/s);
+    assert.match(organize.textContent, /活跃整理.*未绑定/s);
+    assert.match(host.textContent, /DSH 设置.*快捷键/s);
+    assert.equal(shortcut.listenerCount, 1, 'settings subscribes once to the host catalog');
+    await React.act(async () => shortcut.publish([
+      { id: 'dsh-nav-fold.session-navigation', keys: ['Ctrl+J'] },
+      { id: 'dsh-nav-fold.activity-organize', keys: ['Ctrl+O'] },
+    ]));
+    assert.match(nav.textContent, /已绑定/); assert.match(organize.textContent, /已绑定/);
+    assert.equal(nav.querySelector('[data-host-shortcut-keys]').textContent, '["Ctrl+J"]');
+    assert.equal(organize.querySelector('[data-host-shortcut-keys]').textContent, '["Ctrl+O"]');
+    await React.act(async () => shortcut.publish([{ id: 'dsh-nav-fold.activity-organize', keys: [] }]));
+    assert.match(nav.textContent, /未绑定/); assert.match(organize.textContent, /未绑定/);
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    assert.equal(shortcut.listenerCount, 0, 'unmount removes native catalog subscription');
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    fixture.dispose(); dispose();
+  }
 });
 
 test('DS-Bot peer suspension releases navigation without changing saved opt-in', async () => {
