@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+assert(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === '--mobile'),
+  'Usage: node render-stills.mjs [--mobile]');
+const mobile = process.argv[2] === '--mobile';
 const steps = ['fold', 'views', 'organize', 'navigate', 'logo'];
 const states = [...steps.flatMap((step) => ['before', 'after'].map((phase) => [step, phase])), ['organize', 'menu'], ['organize', 'quiet']];
 const preview = new URL('./preview.html', import.meta.url);
@@ -17,8 +20,8 @@ await mkdir(outputDirectory, { recursive: true });
 assert.equal(await realpath(outputDirectory), expectedDirectory, 'output directory must not redirect through a symlink');
 
 async function safeOutput(step, phase) {
-  const filename = `${step}-${phase}.webp`;
-  assert(states.some(([name, stage]) => `${name}-${stage}.webp` === filename));
+  const filename = `${step}-${phase}${mobile ? '-mobile' : ''}.webp`;
+  assert(states.some(([name, stage]) => `${name}-${stage}${mobile ? '-mobile' : ''}.webp` === filename));
   const target = resolve(outputDirectory, filename);
   assert.equal(target, join(expectedDirectory, filename), 'output path must be exactly the new readme-v0414 image path');
   try {
@@ -95,7 +98,9 @@ try {
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   const call = (method, params) => send(method, params, sessionId);
   await call('Page.enable');
-  await call('Emulation.setDeviceMetricsOverride', { width: 960, height: 540, deviceScaleFactor: 2, mobile: false });
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: mobile ? 360 : 960, height: mobile ? 900 : 540, deviceScaleFactor: 2, mobile: false,
+  });
   await call('Page.navigate', { url: preview.href });
   const evaluate = async (expression) => {
     const result = await call('Runtime.evaluate', { expression, returnByValue: true });
@@ -114,17 +119,21 @@ try {
     assert.equal(state.synthetic, true);
     assert.equal(state.step, step);
     assert.equal(state.phase, phase);
-    const image = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    const png = join(scratch, `${step}-${phase}.png`);
+    const frameHeight = mobile ? await evaluate('Math.ceil(document.querySelector(".frame").getBoundingClientRect().height)') : 540;
+    if (mobile) assert(frameHeight > 540 && frameHeight <= 1200, `unexpected responsive frame height: ${frameHeight}`);
+    const image = await call('Page.captureScreenshot', mobile
+      ? { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: 360, height: frameHeight, scale: 1 } }
+      : { format: 'png', captureBeyondViewport: false });
+    const png = join(scratch, `${step}-${phase}${mobile ? '-mobile' : ''}.png`);
     await writeFile(png, Buffer.from(image.data, 'base64'));
     const target = await safeOutput(step, phase); // Recheck immediately before any overwrite.
     assert.equal(target, outputs[index]);
-    execFileSync('cwebp', ['-quiet', '-q', '84', '-resize', '960', '540', png, '-o', target]);
+    execFileSync('cwebp', ['-quiet', '-q', '84', '-resize', mobile ? '360' : '960', String(frameHeight), png, '-o', target]);
     const bytes = (await stat(target)).size;
     totalBytes += bytes;
-    console.log(`${step}-${phase}: ${bytes} bytes`);
+    console.log(`${step}-${phase}${mobile ? '-mobile' : ''}: ${bytes} bytes (${mobile ? `360×${frameHeight}` : '960×540'})`);
   }
-  console.log(`Rendered ${states.length} offline synthetic stills at 960×540; total ${totalBytes} bytes`);
+  console.log(`Rendered ${states.length} offline synthetic ${mobile ? 'mobile ' : ''}stills at ${mobile ? '360×responsive height' : '960×540'}; total ${totalBytes} bytes`);
 } finally {
   socket?.close();
   if (chrome.exitCode === null && chrome.signalCode === null) chrome.kill('SIGTERM');
