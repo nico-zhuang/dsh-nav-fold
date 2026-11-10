@@ -2180,6 +2180,20 @@ test('custom HEX rejected save keeps dialog retryable then closes after an autho
   });
 });
 
+test('custom HEX draft closes when Host switches profiles but keeps the same raw preferences', async () => {
+  await withCustomColorView('rc5', async ({ app, host, open, change }) => {
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await change('[data-activity-custom-hex]', '#2288AA');
+    const previousSnapshot = app.form.getSnapshot();
+    await React.act(async () => { app.form.publishValue({ activityPreferences: '' }); await flush(); });
+    assert.notEqual(app.form.getSnapshot(), previousSnapshot, 'Host snapshot identity changed without changing its raw preferences');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '');
+    assert.ok(!host.querySelector('[role="dialog"]'), 'a new Host document invalidates even a same-raw draft');
+    assert.equal(app.form.setCalls.length, 0, 'no profile-B write');
+  });
+});
+
 test('custom HEX draft closes on external Host profile switch and cannot write stale profile A', async () => {
   await withCustomColorView('rc5', async ({ app, host, open, change }) => {
     await open('a');
