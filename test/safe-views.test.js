@@ -1562,10 +1562,10 @@ test('Activity top group contains only fixed rows and keeps Quiet in place', asy
   } finally { app.dispose(); }
 });
 
-test('Activity Quiet and selected light-theme subtitle contrast stays above WCAG AA', () => {
+test('normal subtitle and single-line Activity Quiet title keep light-theme WCAG AA contrast', () => {
   const standard = Number(source.match(/\.dsh-nav-fold-session-subtitle\s*\{[^}]*currentColor\s+(\d+)%/)?.[1]);
-  const quiet = Number(source.match(/\.dsh-nav-fold-session-quiet \.dsh-nav-fold-session-subtitle\s*\{[^}]*currentColor\)\s+(\d+)%/)?.[1]);
-  assert.ok(standard && quiet, 'read actual CSS mix percentages');
+  const quiet = Number(source.match(/\.dsh-nav-fold-session-quiet \.dsh-nav-fold-session-main\s*\{[^}]*currentColor\)\s+(\d+)%/)?.[1]);
+  assert.ok(standard && quiet, 'read normal subtitle and Quiet title mix percentages from actual CSS');
   const primary = [0x26, 0x39, 0x4f], background = [0xf0, 0xf2, 0xf5];
   const luminance = (rgb) => rgb.reduce((total, channel, index) => {
     const value = channel / 255;
@@ -1574,7 +1574,7 @@ test('Activity Quiet and selected light-theme subtitle contrast stays above WCAG
   for (const [name, percent] of [['normal', standard], ['Quiet', quiet]]) {
     const text = primary.map(channel => (channel * percent + 255 * (100 - percent)) / 100);
     const contrast = (luminance(background) + 0.05) / (luminance(text) + 0.05);
-    assert.ok(contrast >= 4.5, `${name} 11px subtitle must remain AA readable on selected #f0f2f5: ${contrast.toFixed(2)}:1`);
+    assert.ok(contrast >= 4.5, `${name} session text must remain AA readable on selected #f0f2f5: ${contrast.toFixed(2)}:1`);
   }
 });
 
@@ -1688,23 +1688,47 @@ test('Quiet running session keeps its Activity row, is muted and can be restored
     const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
     const host = app.doc.createElement('div'); app.doc.body.append(host);
     const ids = ['busy', ...Array.from({ length: 24 }, (_, i) => `recent${i}`)];
-    const byId = Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: id === 'busy' ? 1 : 100 - i, running: id === 'busy' }]));
-    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, {
-      useSessions: () => ({ ids, byId }), useSessionStatus: () => new Map(), useWorkspaces: () => ({ items: [], pinnedSessionIds: [] }),
-    })); });
+    const byId = Object.fromEntries(ids.map((id, i) => [id, { id, title: id, updatedAt: id === 'busy' ? 1 : 100 - i,
+      running: id === 'busy', cwd: id === 'busy' ? '/projects/quiet-workspace' : undefined }]));
+    const viewProps = { useSessions: () => ({ ids, byId }), useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [], pinnedSessionIds: ['busy'] }) };
+    await React.act(async () => { root = createRoot(host); root.render(React.createElement(View, viewProps)); });
     const busy = host.querySelector('[data-dsh-nav-fold-session-id="busy"]');
     assert.ok(busy, 'running row starts visible');
+    assert.match(busy.querySelector('.dsh-nav-fold-session-subtitle')?.textContent || '', /quiet-workspace/,
+      'ordinary Activity row visibly shows the workspace on its second line');
     await React.act(async () => { busy.closest('.dsh-nav-fold-session').querySelector('[data-session-menu]').click(); });
     await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
     const quiet = host.querySelector('[data-dsh-nav-fold-session-id="busy"]')?.closest('.dsh-nav-fold-session');
     assert.ok(quiet, 'Quiet does not demote a running session past the recent cap');
     assert.match(quiet.className, /dsh-nav-fold-session-quiet/);
-    assert.ok(quiet.querySelector('[data-activity-quiet-icon]'), 'muted row shows a small moon');
+    const quietMain = quiet.querySelector('.dsh-nav-fold-session-main');
+    const quietTitle = quietMain.querySelector('.dsh-nav-fold-session-quiet-title-row');
+    assert.ok(quietTitle, 'only Activity Quiet rows have a dedicated compact title line');
+    assert.equal(quietTitle.querySelector('.dsh-nav-fold-session-title')?.textContent, 'busy');
+    assert.ok(quietTitle.querySelector('[data-activity-quiet-icon]'), 'moon stays on the same line as the title');
+    assert.equal(quietMain.querySelector('.dsh-nav-fold-session-subtitle'), null, 'no invisible workspace line retains height');
+    assert.match(quietMain.getAttribute('aria-label'), /quiet-workspace/, 'accessible name still includes the workspace');
+    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="recent0"]')?.querySelector('.dsh-nav-fold-session-subtitle'),
+      'non-Quiet Activity rows keep the existing two-line layout');
     assert.equal(host.querySelector('[data-activity-quiet-manage]'), null, 'no separate management header');
     await React.act(async () => { quiet.querySelector('[data-session-menu]').click(); });
     await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '取消免打扰').click(); });
-    assert.ok(host.querySelector('[data-dsh-nav-fold-session-id="busy"]'));
+    const restored = host.querySelector('[data-dsh-nav-fold-session-id="busy"]')?.closest('.dsh-nav-fold-session');
+    assert.ok(restored);
     assert.equal(host.querySelector('[data-activity-quiet-icon]'), null, 'restored row has its real running indicator');
+    assert.match(restored.querySelector('.dsh-nav-fold-session-subtitle')?.textContent || '', /quiet-workspace/,
+      'canceling Quiet restores the visible workspace line');
+    assert.ok(restored.querySelector('.dsh-nav-fold-state-dot-running'), 'running state is restored with the subtitle');
+    await React.act(async () => { restored.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '免打扰').click(); });
+    await React.act(async () => { app.doc.querySelector('[data-view="favorites"]').click(); root.render(React.createElement(View, viewProps)); });
+    const favorite = host.querySelector('[data-dsh-nav-fold-session-id="busy"]')?.closest('.dsh-nav-fold-session');
+    assert.ok(favorite, 'pinned session remains accessible in Favorites');
+    assert.equal(favorite.classList.contains('dsh-nav-fold-session-quiet'), false, 'Quiet is Activity-only');
+    assert.equal(favorite.querySelector('.dsh-nav-fold-session-quiet-title-row'), null);
+    assert.match(favorite.querySelector('.dsh-nav-fold-session-subtitle')?.textContent || '', /quiet-workspace/,
+      'Favorites retain the existing two-line row even when Activity Quiet is enabled');
   } finally {
     if (root) await React.act(async () => root.unmount());
     globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
