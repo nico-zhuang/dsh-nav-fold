@@ -1736,6 +1736,37 @@ test('Quiet running session keeps its Activity row, is muted and can be restored
   }
 });
 
+test('adjacent Quiet rows share straight inner edges while ordinary rows break the group', async () => {
+  const prefs = JSON.stringify({ version: 1, sessions: { a: { quiet: true }, b: { quiet: true }, c: { quiet: true }, e: { quiet: true } } });
+  const app = mount({ active: true, activityPreferences: prefs });
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    const byId = Object.fromEntries(ids.map((id, index) => [id, { id, title: id, updatedAt: 100 - index }]));
+    const host = app.doc.createElement('div');
+    host.innerHTML = renderToStaticMarkup(React.createElement(View, {
+      useSessions: () => ({ ids, byId }), useSessionStatus: () => new Map(),
+      useWorkspaces: () => ({ items: [], pinnedSessionIds: [] }),
+    }));
+    const rows = [...host.querySelectorAll('[data-dsh-workspace-view="activity"] > .dsh-nav-fold-session')];
+    assert.deepEqual(rows.map(row => row.querySelector('[data-dsh-nav-fold-session-id]')?.dataset.dshNavFoldSessionId), ids);
+    assert.ok(rows.slice(0, 3).every(row => row.classList.contains('dsh-nav-fold-session-quiet')));
+    assert.ok(rows[0].nextElementSibling === rows[1] && rows[1].nextElementSibling === rows[2], 'first Quiet block is contiguous');
+    assert.ok(!rows[3].classList.contains('dsh-nav-fold-session-quiet') && rows[3].nextElementSibling === rows[4],
+      'ordinary row splits the block before a single Quiet row');
+  } finally { app.dispose(); }
+  const lower = source.match(/\.dsh-nav-fold-session-quiet:has\(\s*\+\s*\.dsh-nav-fold-session-quiet\s*\)\s*\{([^}]*)\}/)?.[1];
+  const upper = source.match(/\.dsh-nav-fold-session-quiet\s*\+\s*\.dsh-nav-fold-session-quiet\s*\{([^}]*)\}/)?.[1];
+  assert.ok(lower, 'a Quiet row adjoining the next one must lose its inner lower corners');
+  assert.ok(upper, 'a Quiet row adjoining the previous one must lose its inner upper corners');
+  for (const side of ['left', 'right']) {
+    assert.match(lower, new RegExp(`border-bottom-${side}-radius:\\s*0\\b`));
+    assert.match(upper, new RegExp(`border-top-${side}-radius:\\s*0\\b`));
+  }
+  assert.match(source, /\.dsh-nav-fold-session\s*\{[^}]*border-radius:\s*7px/, 'an isolated Quiet row keeps all four default rounded corners');
+});
+
 test('Quiet menu action reports Host save rejection and rolls back the local preview', async () => {
   await withArchiveView({}, async ({ app, host }) => {
     const set = app.form.set.bind(app.form);

@@ -10,9 +10,9 @@
 
 ## Global Constraints
 
-- 只更改 `lib/client.js` 与 `test/safe-views.test.js` 及本设计／计划文档；沿用 `feat/activity-custom-color-phase1`，不改正式 main、v0.4.14、Host schema 或已安装插件。
+- 只更改 `lib/client.js` 与 `test/safe-views.test.js` 及本设计／计划文档；沿用 `feat/activity-custom-color-phase1`，不改正式 main、Host schema 或现用 web profile 中的 v0.4.13 插件。
 - Quiet 的背景弱化、3px 色标、顶部固定、原有月亮文案与取消菜单不变。按钮 `aria-label` 保留工作区；普通会话和收藏／工作区 Tab 仍显示工作区副行。
-- 不把 jsdom 的 DOM 断言当成真实 DSH GUI 像素验收；不推送／安装／发布。
+- 用户已授权本机实测；只在新建 `navfold-qa-20261111` profile 安装临时开发包。该 profile 仍看得到本机真实会话列表，测试时不得打开或修改真实会话；不推送／发布，也不把 jsdom 的断言冒充真实 DSH GUI 验收。
 
 ---
 
@@ -27,6 +27,18 @@
 - [x] **Step 3: Minimal implementation**: in `SessionRow` render `activityOnly && row.quiet ? React.createElement('span', {className:'dsh-nav-fold-session-quiet-title-row'}, React.createElement('span',{className:'dsh-nav-fold-session-title'}, row.title || row.id), React.createElement('span',{className:'dsh-nav-fold-quiet-icon',...}, moonIcon())) : React.createElement(React.Fragment,null, existing title, existing subtitle-with-workspace-and-state-dot)` inside the existing main button. Keep `aria-label` and all menu branches unchanged. Replace unused Quiet subtitle CSS with `.dsh-nav-fold-session-quiet-title-row { display:flex;align-items:center;gap:5px;min-width:0;padding-right:82px; }`, native Activity override `padding-right:58px`, and `.dsh-nav-fold-session-quiet-title-row .dsh-nav-fold-session-title { flex:0 1 auto;min-width:0;padding-right:0; }`; moon retains its `flex:none;width:16px;height:16px` rule.
 - [x] **Step 4: Verify GREEN and full suite**: rerun focused command; run `node --check lib/client.js` and `node --test --test-concurrency=1 test/*.test.js` (the existing parallel README renderer occasionally reads a zero-byte desktop WebP); `git diff --check` must be empty. Run Impeccable detector after UI changes. Review actual source/diff for untouched menu/Host behavior.
 - [x] **Step 5: Commit scoped files**: after review stage only `lib/client.js`, `test/safe-views.test.js` and the two Quiet design/plan docs; commit on the feature branch. Do not alter installed DSH or README stills.
+
+### Task 2: 连续 Quiet 底色连接及隔离实测
+
+**Files:** Modify `lib/client.js:215-221`; Test `test/safe-views.test.js:1681-1740` or adjacent static CSS test; update this plan/spec only. QA package from local committed branch, not current web profile.
+
+**Interfaces:** `.dsh-nav-fold-session-quiet` remains the only Quiet row indicator. Adjacent rows are direct siblings in one Activity container; top-group heading/divider and ordinary rows interrupt sibling adjacency. CSS `:has(+ .dsh-nav-fold-session-quiet)` targets an adjacent following Quiet row.
+
+- [x] **Step 1: Write failing test**: assert source contains a selector that zeroes *both* bottom radii when a Quiet sibling follows and a selector that zeroes *both* top radii when a Quiet sibling precedes, each scoped to `.dsh-nav-fold-session-quiet`; also render two consecutive Quiet rows and assert they are adjacent siblings in the same Activity group, with a non-Quiet row between groups breaking adjacency.
+- [x] **Step 2: Verify RED**: `node --test --test-name-pattern='adjacent Quiet' test/safe-views.test.js` fails due missing inner-corner selectors (no production edits yet).
+- [x] **Step 3: Implement minimal CSS**: append `.dsh-nav-fold-session-quiet:has(+ .dsh-nav-fold-session-quiet) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }` and `.dsh-nav-fold-session-quiet + .dsh-nav-fold-session-quiet { border-top-left-radius: 0; border-top-right-radius: 0; }` after the existing 7px `.dsh-nav-fold-session` radius. Do not touch SessionRow props, sorting, persistence, colors or menus.
+- [ ] **Step 4: Verify GREEN + review**: rerun focused and complete serial tests, `node --check lib/client.js`, `git diff --check` and Impeccable detector; independent read-only source review confirms no group boundary bleed. Commit source/tests/spec/plan only in feature branch.
+- [ ] **Step 5: QA install & GUI**: produce a new local tarball from the reviewed commit, install it only into `navfold-qa-20261111`, restart its own Web server, authenticate at its newly printed loopback URL, inspect actual Quiet single-line height and consecutive seam at the narrow sidebar width. Configure QA-only activity preferences without opening or mutating shared real sessions; if needed use a disposable synthetic view, clearly label it. Verify current web profile still has v0.4.13 and was untouched; report any untested items.
 
 ## Self-review
 
