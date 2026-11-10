@@ -72,7 +72,8 @@ function mount({ savedOn = false, active = false, peers = [], status = 'ready', 
       IconPinFillRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       IconArchiveOutlineRegular: () => React.createElement('svg', { 'aria-hidden': true }),
       Button: ({ children, ...props }) => React.createElement('button', { type: 'button', ...props }, children),
-      Modal: ({ open, title, description, footer, onClose, children }) => open && React.createElement('div', { role: 'dialog', 'aria-label': title },
+      Modal: ({ open, title, description, footer, onClose, children }) => open && React.createElement('div', { role: 'dialog', 'aria-label': title,
+        onKeyDown: event => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } } },
         React.createElement('p', null, description), children, footer,
         React.createElement('button', { type: 'button', 'aria-label': 'Close dialog', onClick: onClose }, '×')),
     }
@@ -2043,5 +2044,151 @@ test('choosing an Activity swatch restores focus to its row menu anchor', async 
     await React.act(async () => { blue.click(); });
     assert.ok(app.doc.activeElement === anchor, 'closing the color menu never strands keyboard focus on BODY');
     assert.equal(host.querySelector('[data-activity-color="blue"]') !== null, true);
+  });
+});
+
+async function withCustomColorView(nativeBuild, check, { activityPreferences = '' } = {}) {
+  const contextMenus = { open() {}, close() {}, active: { getSnapshot: () => null } };
+  const app = mount({ active: true, nativeBuild, contextMenus, activityPreferences });
+  const previousWindow = globalThis.window, previousDocument = globalThis.document, previousAct = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.window = app.dom.window; globalThis.document = app.doc; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  // ReactDOM was imported before JSDOM; its legacy input-event fallback needs the absent IE hooks on focus.
+  app.dom.window.HTMLInputElement.prototype.attachEvent = () => {};
+  app.dom.window.HTMLInputElement.prototype.detachEvent = () => {};
+  let root;
+  try {
+    await flush(); app.doc.querySelector('[data-view="activity"]').click();
+    const View = app.entries.find(entry => entry.registrant === 'dsh-nav-fold:workspace-views').component;
+    const host = app.doc.createElement('div'); app.doc.body.append(host);
+    const useContextMenu = () => ({ getTriggerProps: () => ({}) });
+    await React.act(async () => {
+      root = createRoot(host);
+      root.render(React.createElement(View, {
+        ...(nativeBuild === 'rc1' ? { useContextMenu } : {}),
+        useSessions: () => ({ ids: ['a', 'b'], byId: { a: { id: 'a', title: 'A' }, b: { id: 'b', title: 'B' } } }),
+        useSessionStatus: () => new Map(),
+        useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['a', 'b'] }], pinnedSessionIds: [] }),
+      }));
+    });
+    const row = (id) => [...host.querySelectorAll('.dsh-nav-fold-session')].find(node => node.querySelector(`[data-dsh-nav-fold-session-id="${id}"]`));
+    const anchor = (id) => row(id).querySelector('[data-activity-organize]');
+    const open = async (id) => React.act(async () => { anchor(id).click(); });
+    const change = async (selector, value) => React.act(async () => {
+      const input = host.querySelector(selector);
+      const setter = Object.getOwnPropertyDescriptor(app.dom.window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, value);
+      input.dispatchEvent(new app.dom.window.Event('input', { bubbles: true }));
+      input.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
+    });
+    await check({ app, host, row, anchor, open, change });
+  } finally {
+    if (root) await React.act(async () => root.unmount());
+    globalThis.window = previousWindow; globalThis.document = previousDocument; globalThis.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    app.dispose();
+  }
+}
+
+for (const nativeBuild of ['rc5', 'rc1']) test(`custom HEX picker ${nativeBuild} opens without writing, validates and cancels back to its own anchor`, async () => {
+  await withCustomColorView(nativeBuild, async ({ app, host, anchor, open, change }) => {
+    await open('a');
+    const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
+    assert.deepEqual(swatches.map(node => node.dataset.activitySwatch), ['none', 'green', 'blue', 'violet', 'rose', 'amber']);
+    assert.ok(host.querySelector('[data-activity-custom-open]'), 'separate custom action below unchanged grid');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    assert.equal(app.form.setCalls.length, 0);
+    assert.equal(host.querySelector('[role="menu"]'), null, 'menu closes before dialog opens');
+    const dialog = host.querySelector('[role="dialog"]');
+    assert.ok(dialog);
+    assert.equal(dialog.querySelector('[data-activity-custom-picker]').type, 'color');
+    assert.equal(dialog.querySelector('[data-activity-custom-hex]').type, 'text');
+    assert.ok(app.doc.activeElement === dialog.querySelector('[data-activity-custom-hex]'), 'opening Modal focuses editable HEX field');
+    assert.equal(dialog.querySelectorAll('[data-activity-custom-preview] [data-color-bar]').length, 2);
+    assert.match(source, /\.dsh-nav-fold-custom-color-preview[^}]*width:\s*3px/, 'light/dark bars are 3px');
+    await change('[data-activity-custom-hex]', '#ZZ9900');
+    assert.equal(host.querySelector('[data-activity-custom-confirm]').disabled, true, 'invalid HEX disables explicit confirmation');
+    assert.ok(host.querySelector('[role="dialog"] [role="alert"]'));
+    await change('[data-activity-custom-picker]', '#c68ae2');
+    assert.equal(host.querySelector('[data-activity-custom-hex]').value, '#C68AE2', 'native picker and HEX synchronize');
+    assert.equal(host.querySelector('[data-activity-custom-confirm]').disabled, false);
+    await React.act(async () => { host.querySelector('[data-activity-custom-cancel]').click(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.equal(app.doc.activeElement, anchor('a'));
+    assert.equal(app.form.setCalls.length, 0, 'cancel does not save');
+    await open('a');
+    const last = host.querySelector('[data-activity-swatch="amber"]'); last.focus();
+    await React.act(async () => { last.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+    assert.equal(app.doc.activeElement, host.querySelector('[data-activity-custom-open]'), 'last palette swatch tabs to separate custom action');
+    assert.ok(host.querySelector('[role="menu"]'));
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await React.act(async () => { host.querySelector('[role="dialog"]').dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    assert.equal(host.querySelector('[role="dialog"]'), null, 'Escape cancels the native Modal');
+    assert.equal(app.doc.activeElement, anchor('a'));
+    assert.equal(app.form.setCalls.length, 0, 'Escape does not save');
+  });
+});
+
+for (const nativeBuild of ['rc5', 'rc1']) test(`custom HEX ${nativeBuild} confirms once, reuses slot, and editing only recolors current row`, async () => {
+  await withCustomColorView(nativeBuild, async ({ app, host, row, anchor, open, change }) => {
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await change('[data-activity-custom-hex]', '#c68ae2');
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); await flush(); });
+    assert.equal(app.form.setCalls.filter(([field]) => field === 'activityPreferences').length, 1);
+    let saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.customColor, '#C68AE2');
+    assert.equal(saved.sessions.a.color, '#C68AE2');
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.equal(app.doc.activeElement, anchor('a'));
+    await open('b');
+    assert.ok(host.querySelector('[data-activity-custom-use]'));
+    assert.ok(host.querySelector('[data-activity-custom-edit]'));
+    await React.act(async () => { host.querySelector('[data-activity-custom-use]').click(); await flush(); });
+    saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.sessions.b.color, '#C68AE2', 'one-click saved custom color applies to another row');
+    await open('b');
+    await React.act(async () => { host.querySelector('[data-activity-custom-use]').click(); await flush(); });
+    saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.sessions.b?.color, undefined, 'one-click matching custom swatch clears this row, not the saved slot');
+    assert.equal(saved.customColor, '#C68AE2');
+    await open('b');
+    await React.act(async () => { host.querySelector('[data-activity-custom-edit]').click(); });
+    await change('[data-activity-custom-hex]', '#2266dd');
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); await flush(); });
+    saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.customColor, '#2266DD');
+    assert.equal(saved.sessions.a.color, '#C68AE2', 'older rows retain literal HEX, not a reference to global slot');
+    assert.equal(saved.sessions.b.color, '#2266DD');
+    assert.equal(row('a').querySelector('.dsh-nav-fold-color-mark').style.backgroundColor, 'rgb(198, 138, 226)');
+  });
+});
+
+test('custom HEX rejected save keeps dialog retryable then closes after an authoritative Host commit', async () => {
+  await withCustomColorView('rc5', async ({ app, host, open, change }) => {
+    const originalSet = app.form.set.bind(app.form);
+    let reject = true;
+    app.form.set = (field, value) => reject && field === 'activityPreferences' ? Promise.resolve(false) : originalSet(field, value);
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await change('[data-activity-custom-hex]', '#22AA88');
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); await flush(); });
+    assert.ok(host.querySelector('[role="dialog"] [role="alert"]'), 'failed save explains how to retry');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '');
+    reject = false;
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); await flush(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null);
+    assert.equal(JSON.parse(app.form.getSnapshot().value.activityPreferences).sessions.a.color, '#22AA88');
+  });
+});
+
+test('custom HEX draft closes on external Host profile switch and cannot write stale profile A', async () => {
+  await withCustomColorView('rc5', async ({ app, host, open, change }) => {
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await change('[data-activity-custom-hex]', '#2288AA');
+    const profileB = JSON.stringify({ version: 1, sessions: { b: { top: true } } });
+    await React.act(async () => { app.form.publishValue({ activityPreferences: profileB }); await flush(); });
+    assert.equal(host.querySelector('[role="dialog"]'), null, 'external Host document invalidates current draft');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, profileB);
+    assert.equal(app.form.setCalls.length, 0);
   });
 });
