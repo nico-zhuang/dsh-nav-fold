@@ -1,0 +1,110 @@
+// Capture only the offline, synthetic preview; never connect to a running DSH instance.
+import assert from 'node:assert/strict';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, writeFile, realpath, lstat, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const steps = ['fold', 'views', 'organize', 'navigate', 'logo'];
+const states = [...steps.flatMap((step) => ['before', 'after'].map((phase) => [step, phase])), ['organize', 'menu'], ['organize', 'quiet']];
+const preview = new URL('./preview.html', import.meta.url);
+assert.equal(preview.protocol, 'file:');
+const outputDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '../images/readme-v0414');
+const expectedDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '../images/readme-v0414');
+assert.equal(outputDirectory, expectedDirectory);
+await mkdir(outputDirectory, { recursive: true });
+assert.equal(await realpath(outputDirectory), expectedDirectory, 'output directory must not redirect through a symlink');
+
+async function safeOutput(step, phase) {
+  const filename = `${step}-${phase}.webp`;
+  assert(states.some(([name, stage]) => `${name}-${stage}.webp` === filename));
+  const target = resolve(outputDirectory, filename);
+  assert.equal(target, join(expectedDirectory, filename), 'output path must be exactly the new readme-v0414 image path');
+  try {
+    const existing = await lstat(target);
+    assert(!existing.isSymbolicLink(), `refusing to overwrite symlink: ${target}`);
+    assert(existing.isFile(), `refusing to overwrite non-file: ${target}`);
+    assert.equal(await realpath(target), target);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  return target;
+}
+
+// Complete path validation before even starting a browser or writing an output.
+const outputs = await Promise.all(states.map(([step, phase]) => safeOutput(step, phase)));
+const scratch = await mkdtemp(join(tmpdir(), 'navfold-v0414-stills-'));
+const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--disable-background-networking', '--disable-component-update', '--disable-extensions',
+  '--disable-sync', '--disable-default-apps', '--no-pings', '--hide-scrollbars',
+  '--remote-debugging-port=0', `--user-data-dir=${join(scratch, 'chrome-profile')}`, 'about:blank',
+], { stdio: ['ignore', 'ignore', 'pipe'] });
+let socket;
+try {
+  const address = await new Promise((resolveAddress, reject) => {
+    let stderr = '';
+    const timer = setTimeout(() => reject(Error(`Chrome startup timeout: ${stderr.slice(-1200)}`)), 20_000);
+    chrome.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      const match = stderr.match(/DevTools listening on (ws:\/\/\S+)/);
+      if (match) { clearTimeout(timer); resolveAddress(match[1]); }
+    });
+    chrome.on('error', (error) => { clearTimeout(timer); reject(error); });
+    chrome.on('exit', (code) => { clearTimeout(timer); reject(Error(`Chrome exited before CDP startup (${code}): ${stderr.slice(-1200)}`)); });
+  });
+  socket = new WebSocket(address);
+  await new Promise((resolveOpen, reject) => { socket.onopen = resolveOpen; socket.onerror = reject; });
+  let id = 0;
+  const pending = new Map();
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (!message.id) return;
+    const waiter = pending.get(message.id);
+    pending.delete(message.id);
+    message.error ? waiter.reject(Error(JSON.stringify(message.error))) : waiter.resolve(message.result);
+  };
+  const send = (method, params = {}, sessionId) => new Promise((resolveCall, reject) => {
+    const request = ++id;
+    pending.set(request, { resolve: resolveCall, reject });
+    socket.send(JSON.stringify({ id: request, method, params, ...(sessionId ? { sessionId } : {}) }));
+  });
+  const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
+  const call = (method, params) => send(method, params, sessionId);
+  await call('Page.enable');
+  await call('Emulation.setDeviceMetricsOverride', { width: 960, height: 540, deviceScaleFactor: 2, mobile: false });
+  await call('Page.navigate', { url: preview.href });
+  const evaluate = async (expression) => {
+    const result = await call('Runtime.evaluate', { expression, returnByValue: true });
+    if (result.exceptionDetails) throw Error(JSON.stringify(result.exceptionDetails));
+    return result.result.value;
+  };
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (await evaluate('typeof window.renderStep === "function"')) break;
+    await new Promise((finish) => setTimeout(finish, 80));
+  }
+  assert.equal(await evaluate('typeof window.renderStep'), 'function');
+  assert.equal(await evaluate('location.protocol'), 'file:');
+  let totalBytes = 0;
+  for (const [index, [step, phase]] of states.entries()) {
+    const state = await evaluate(`window.renderStep(${JSON.stringify(step)}, ${JSON.stringify(phase)})`);
+    assert.equal(state.synthetic, true);
+    assert.equal(state.step, step);
+    assert.equal(state.phase, phase);
+    const image = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+    const png = join(scratch, `${step}-${phase}.png`);
+    await writeFile(png, Buffer.from(image.data, 'base64'));
+    const target = await safeOutput(step, phase); // Recheck immediately before any overwrite.
+    assert.equal(target, outputs[index]);
+    execFileSync('cwebp', ['-quiet', '-q', '84', '-resize', '960', '540', png, '-o', target]);
+    const bytes = (await stat(target)).size;
+    totalBytes += bytes;
+    console.log(`${step}-${phase}: ${bytes} bytes`);
+  }
+  console.log(`Rendered ${states.length} offline synthetic stills at 960×540; total ${totalBytes} bytes`);
+} finally {
+  socket?.close();
+  chrome.kill();
+}

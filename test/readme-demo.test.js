@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,6 +7,8 @@ import { JSDOM } from 'jsdom';
 const preview = fileURLToPath(new URL('../docs/readme-demo-v0414/preview.html', import.meta.url));
 const steps = ['fold', 'views', 'organize', 'navigate', 'logo'];
 const phases = ['before', 'after'];
+const stillStates = [...steps.flatMap((step) => phases.map((phase) => [step, phase])), ['organize', 'menu'], ['organize', 'quiet']];
+const stillDirectory = new URL('../docs/images/readme-v0414/', import.meta.url);
 
 function loadPreview() {
   return new JSDOM(readFileSync(preview, 'utf8'), { runScripts: 'dangerously', url: 'file:///synthetic-preview.html' });
@@ -24,6 +26,22 @@ test('all five stages render independently with a visible caption and synthetic 
     assert.equal(window.document.querySelector('[data-scene]').dataset.scene, step);
     assert.equal(window.document.querySelector('[data-phase]').dataset.phase, phase);
     assert.ok(window.document.querySelector('[data-stage-title]').textContent.trim());
+  }
+  window.close();
+});
+
+test('all twelve deterministic states have legible WebP stills', () => {
+  const { window } = loadPreview();
+  for (const [step, phase] of stillStates) {
+    const state = window.renderStep(step, phase);
+    assert.equal(state.synthetic, true);
+    assert.equal(state.step, step);
+    assert.equal(state.phase, phase);
+    const image = new URL(`${step}-${phase}.webp`, stillDirectory);
+    const bytes = readFileSync(image);
+    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF', `${step}-${phase} RIFF signature`);
+    assert.equal(bytes.toString('ascii', 8, 12), 'WEBP', `${step}-${phase} WEBP signature`);
+    assert.ok(statSync(image).size > 10_000, `${step}-${phase} must exceed 10 KB`);
   }
   window.close();
 });
