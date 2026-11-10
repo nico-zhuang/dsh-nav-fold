@@ -1,18 +1,12 @@
 # dsh-nav-fold · v0.4.14（正式版）
 
-> 一个插件整理 DSH 左侧栏：收起全局导航、按需开启工作区三栏，并用可配置快捷键进入文件夹／会话焦点导航、打开明确聚焦的活跃会话整理菜单。也可通过「无线麦」映射小米蓝牙遥控器按键；Fold 不直接连接蓝牙设备。macOS 顶部 Logo 隐藏功能收录并适配 [stoner-byte 的 dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand)（MIT）。
+> 一条细线收起全局导航，把空间留给工作区与会话。工作区／活动／收藏按需开启；可配置快捷键先移动会话焦点，再整理或打开当前会话。macOS 还可独立隐藏顶部 Logo。
 
-**一条细线，收起全局导航。工作区视图，按需开启。**
-
-点击侧栏导航底部，面板列表收成一排图标；再点一下，回到熟悉的列表。工作区与会话留在原位。
-
-![真实插件交互演示：收起导航、即时名称、拖动排序，再展开](docs/images/demo.gif)
-
-[观看高清演示 · 60fps MP4](https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.1/dsh-nav-fold-demo.mp4)
+下方五组画面可单独阅读，每组围绕一个功能主题，展示具体操作与结果。**画面是虚构资料的独立匿名合成示意，不是实际 DSH 录屏、真实插件 GUI 验收或遥控器实拍。** 正式功能与安装说明仍以本页文字和 [v0.4.14 发布说明](docs/releases/v0.4.14.md)为准。
 
 ## 安装与升级
 
-**v0.4.14 安装：**从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.14) 下载 `dsh-nav-fold-0.4.14.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
+**v0.4.14 安装：** 从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.14) 下载 `dsh-nav-fold-0.4.14.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
 
 ```sh
 dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.14/dsh-nav-fold-0.4.14.tgz
@@ -20,7 +14,117 @@ dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/rel
 
 已针对 **DSH 0.2.1-rc.5 与 0.2.2-rc.1** 两个已发布构建核对原生侧栏结构并做自动化回归；不代表 0.2.1 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.13](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.13) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
 
+## 五步看懂 Fold
+
+这五组画面使用虚构会话与离线合成界面；**只说明功能如何运作，不是已登录 DSH 的截图或现场验收**。每步的结果图可独立阅读，操作前图按需展开；画面上的遥控器是示意图，未做实体设备测试。
+
+### 收起导航：工作区仍在原位
+
+点击全局导航下方的细线，六个面板入口收为图标；悬停或键盘聚焦图标时，名称在细线中央即时出现。工作区与会话不随导航收起而移走。
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/fold-after-mobile.webp">
+<img alt="匿名合成示意：全局导航收成一排图标，工作区与会话仍在下方" src="docs/images/readme-v0414/fold-after.webp">
+</picture>
+
+<details><summary>看操作前：展开的全局导航</summary>
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/fold-before-mobile.webp">
+<img alt="匿名合成示意：六个全局面板在展开状态显示名称" src="docs/images/readme-v0414/fold-before.webp">
+</picture>
+
+</details>
+
+### 按需开启三栏：不替用户改设置
+
+安装后「工作区／活动／收藏三栏」**默认关闭**。在插件配置中主动开启并保存，三个 SVG Tab 才出现；切换栏目不会自动打开会话。
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/views-after-mobile.webp">
+<img alt="匿名合成示意：保存开关后，侧栏出现工作区、活动、收藏三个图标 Tab" src="docs/images/readme-v0414/views-after.webp">
+</picture>
+
+<details><summary>看操作前：默认保留原生工作区</summary>
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/views-before-mobile.webp">
+<img alt="匿名合成示意：三栏开关尚未启用，工作区保持原样" src="docs/images/readme-v0414/views-before.webp">
+</picture>
+
+</details>
+
+### 活跃整理：只操作明确聚焦的一行
+
+先让「活动」中的会话主按钮获得键盘焦点，再通过**用户自行绑定**的整理快捷键打开**该行自己的**菜单；选择「固定在顶部」后，它进入独立顶部分组，钴蓝色标成为左侧 3px 细条。顶部固定不等于 DSH 原生置顶，也不会把会话加入收藏。rc.1 使用 Fold 独立整理入口、不点宿主三点；rc.5 使用 Fold 自有的兼容菜单。
+
+**打开该行菜单：**
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/organize-menu-mobile.webp">
+<img alt="匿名合成示意：聚焦行自己的整理菜单，六格色标和固定在顶部操作" src="docs/images/readme-v0414/organize-menu.webp">
+</picture>
+
+**固定到顶部并选色后：**
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/organize-after-mobile.webp">
+<img alt="匿名合成示意：聚焦会话被固定到活跃列表顶部并带有钴蓝细色条" src="docs/images/readme-v0414/organize-after.webp">
+</picture>
+
+<details><summary>另看聚焦起点与 Quiet 独立示例</summary>
+
+[聚焦但尚未打开菜单](docs/images/readme-v0414/organize-before.webp) · [另一次独立操作：Quiet 视觉效果](docs/images/readme-v0414/organize-quiet.webp)（Quiet 只让活跃行变淡、显示月亮；不停止任务，也不关闭通知或审批。）
+
+</details>
+
+### 会话导航：先移动焦点，再确认打开
+
+两项原生快捷键**均无预设键位**，先在 DSH 设置中自行绑定。进入会话导航后，↑↓移动真实焦点、←→切换栏目；Enter 才打开聚焦会话，或展开／收起原生文件夹；Esc 退出。小米蓝牙遥控器可经「无线麦」映射用户绑定的入口组合键，Fold 不负责连接蓝牙设备。图中的遥控器与映射均是合成示意，**不是实拍或已验证的实体遥控器交互**。
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/navigate-after-mobile.webp">
+<img alt="匿名合成示意：键盘焦点落在会话行，按 Enter 后才打开该会话；遥控器映射仅为示意" src="docs/images/readme-v0414/navigate-after.webp">
+</picture>
+
+<details><summary>看操作前：已聚焦，但尚未按 Enter</summary>
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/navigate-before-mobile.webp">
+<img alt="匿名合成示意：方向键只移动焦点，不自动打开会话" src="docs/images/readme-v0414/navigate-before.webp">
+</picture>
+
+</details>
+
+### macOS 隐藏 Logo：与三栏互不依赖
+
+「隐藏顶部 Logo」是独立保存、默认关闭的 macOS 开关；即使三栏仍关闭，也可隐藏顶部纯展示品牌行，让「新会话」上移。其他平台不在这项功能的适用范围内。
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/logo-after-mobile.webp">
+<img alt="匿名合成示意：macOS 隐藏顶部 Logo 后新会话上移，三栏仍关闭" src="docs/images/readme-v0414/logo-after.webp">
+</picture>
+
+<details><summary>看操作前：顶部品牌行仍显示</summary>
+
+<picture>
+<source media="(max-width: 600px)" srcset="docs/images/readme-v0414/logo-before-mobile.webp">
+<img alt="匿名合成示意：macOS 顶部品牌行显示，三栏仍关闭" src="docs/images/readme-v0414/logo-before.webp">
+</picture>
+
+</details>
+
+<details><summary>早期导航动图与高清版本（v0.4.1）</summary>
+
+![v0.4.1 匿名示意页运行真实插件生成的折叠导航旧动图](docs/images/demo.gif)
+
+[观看 v0.4.1 演示 · 60fps MP4](https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.1/dsh-nav-fold-demo.mp4)。该旧演示只展示当时的导航折叠与排序，不代表上面五步已经在真实 DSH GUI 或实体遥控器上验收。
+
+</details>
+
 ## 左侧栏优化，按需开启
+
+<details><summary>查看设置路径、快捷键与旧版兼容说明</summary>
 
 设置在 **插件 → 已安装 → dsh-nav-fold → 配置**，按用途分为两组；三个开关各自保存，不相互替代。v0.4.14 新增「活跃整理」原生快捷键，配置页也实时显示两项快捷键的绑定状态：
 
@@ -28,6 +132,8 @@ dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/rel
 - **空间整理**：可独立开启「隐藏顶部 Logo」（仅 macOS），不要求打开三栏。这项功能收录并适配 [stoner-byte 的 dsh-hide-brand](https://github.com/stoner-byte/dsh-hide-brand)，许可与来源见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 v0.4.12 仅将折叠导航细线和箭头的视觉内容上移 4px（CSS 像素），保留原有 24px 可聚焦点击区域、36px 图标行及会话列表可用高度；三栏 Tab 的外侧边距在 DSH 0.2.2-rc.1 为 4px、0.2.1-rc.5 为 2px，与各自原生「新会话」按钮的外边距一致，原生「新会话」按钮本身未改动。选中 Tab 的主题填色不变；DS Bot／Bridge 底部入口聚合仍仅在研究阶段，不属于此次改动。v0.4.11 曾让选中 Tab 使用随深浅主题调整的更柔和填色，并去掉折叠导航中宿主 8px 与 Fold 自身 6px 的重复上下间距；v0.4.10 在 rc.1 上把会话行三点操作交回 DSH 原生菜单，rc.5 保留旧版回退，不修改已保存偏好。已验证自动化行为测试；**v0.4.12 安装后的真实 DSH GUI 视觉验收尚未完成，新版菜单也尚无已认证的真实 DSH GUI 点击验收，实体遥控器组合操作未亲测**，不将源码或模拟测试称为现场验收。
+
+</details>
 
 ## 交互，刚好够用
 
@@ -48,7 +154,7 @@ v0.4.12 仅将折叠导航细线和箭头的视觉内容上移 4px（CSS 像素�
 
 </details>
 
-> 动画与截图均在[匿名示意页](docs/preview.html)中运行真实插件生成；动画的指针输入由脚本驱动。项目和扩展面板名称为虚构数据，不包含真实会话或账号；实际图标由 DSH 与已安装插件提供。
+> 上方 v0.4.1 旧动图与本节三张导航静态图在[匿名示意页](docs/preview.html)中运行当时的真实插件生成，指针由脚本驱动；其中的面板名称为虚构数据。新加入的 **v0.4.14 五步画面**另由离线合成界面制作，只有功能来源与图标／色值经源码核对，**不是运行真实插件或已登录 DSH 的截图**。
 
 ## v0.4.3 新增：工作区／活动／收藏（默认关闭）
 

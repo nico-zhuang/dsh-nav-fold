@@ -87,7 +87,14 @@
     .remote-flow span { max-width: 88px; }
     .foot { border-top: 1px solid #303846; padding: 10px 26px; color: #b9c8da; font-size: 12px; line-height: 16px; }
     @media (max-width: 690px) { .frame { height: auto; min-height: 540px; grid-template-rows: auto auto auto; } .heading { padding: 16px; } .canvas { grid-template-columns: 1fr; padding: 14px 16px 20px; } .app { height: 390px; } .explain { align-self: start; gap: 9px; } .explain h2 { font-size: 17px; } .foot { padding: 12px 16px; } }
-    @media (max-width: 390px) { .app { grid-template-columns: 58% 42%; } .content { padding: 13px; } .menu { left: 85px; } }
+    @media (max-width: 390px) {
+      .app { grid-template-columns: 58% 42%; height: 440px; }
+      .folded .global { grid-template-columns: repeat(auto-fit, 36px); justify-content: space-evenly; }
+      .content { padding: 13px 9px; }
+      .content h2 { font-size: 15px; }
+      .content p { font-size: 11px; }
+      .menu { left: 85px; top: 202px; }
+    }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
   </style>
 </head>
