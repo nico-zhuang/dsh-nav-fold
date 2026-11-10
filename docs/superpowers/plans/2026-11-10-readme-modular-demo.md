@@ -21,7 +21,7 @@
 
 **Files:** Create `docs/readme-demo-v0414/preview.html`; Test `test/readme-demo.test.js`.
 
-**Interfaces:** `window.renderStep(step, phase)` accepts `step ∈ {'fold','views','organize','navigate','logo'}` and `phase ∈ {'before','after'}`, returns `{step,phase,folded,tabsVisible,topGroup,colorStripe,focused,opened,logoHidden,synthetic}`; `window.renderStep` updates visible DOM without timers or network.
+**Interfaces:** `window.renderStep(step, phase)` accepts `step ∈ {'fold','views','organize','navigate','logo'}` and base `phase ∈ {'before','after'}`; `organize` also supports `menu` (focused row's own opened menu) and `quiet` (separate Quiet action), returning `{step,phase,folded,tabsVisible,topGroup,colorStripe,focused,opened,logoHidden,synthetic}`; DOM updates are seekable without timers or network.
 
 - [ ] **Step 1: Write the failing test**: in `test/readme-demo.test.js` use JSDOM `{runScripts:'dangerously'}` to load the HTML and assert `renderStep('views','before').tabsVisible === false`, `renderStep('views','after').tabsVisible === true`, `renderStep('organize','after').topGroup === true`, `renderStep('navigate','before').opened === false`, `renderStep('navigate','after').opened === true`, `renderStep('logo','after').logoHidden === true`, `document.body.textContent` contains `匿名合成`, and all 3 tabs contain SVG; also assert `renderStep('logo','after').tabsVisible === false`.
 - [ ] **Step 2: Run**: `node --test test/readme-demo.test.js` → FAIL: missing HTML or `renderStep`.
@@ -29,14 +29,14 @@
 - [ ] **Step 4: Run**: `node --test test/readme-demo.test.js` and inspect all ten deterministic states → PASS.
 - [ ] **Step 5: Commit**: `git add docs/readme-demo-v0414/preview.html test/readme-demo.test.js && git commit -m 'feat: build faithful modular README stage preview'`.
 
-### Task 2: 十张起终帧与视觉核查
+### Task 2: 十张起终帧、两张整理补帧与视觉核查
 
-**Files:** Create `docs/readme-demo-v0414/render-stills.mjs`; create `docs/images/readme-v0414/{fold,views,organize,navigate,logo}-{before,after}.webp`; Test `test/readme-demo.test.js`.
+**Files:** Create `docs/readme-demo-v0414/render-stills.mjs`; create `docs/images/readme-v0414/{fold,views,organize,navigate,logo}-{before,after}.webp` plus `organize-menu.webp` and `organize-quiet.webp`; Test `test/readme-demo.test.js`.
 
 **Interfaces:** renderer opens local `preview.html` in headless Chrome with new temporary profile, calls `renderStep(step,phase)`, takes PNG snapshots then converts each to optimized WebP; never accesses logged-in DSH.
 
-- [ ] **Step 1: Extend failing test** to require ten images by joining the five identifiers and two phases, check each image signature is RIFF/WEBP and size > 10 KB, and invoke `renderStep` for every combination; `node --test test/readme-demo.test.js` → FAIL: missing image.
-- [ ] **Step 2: Implement renderer** using CDP bootstrap proven in `artifacts/drafts/v0413-homepage-demo/render.mjs:12-37`; for each `(step,phase)` call `Runtime.evaluate(window.renderStep(...))`, assert returned `synthetic===true`, capture screenshot, convert with `cwebp -q 84 -resize 960 540 <png> -o <target.webp>`. Use `mkdtemp` for scratch, no delete or move of existing files; before overwriting generated outputs verify resolved target paths are the intended `docs/images/readme-v0414` ten files.
+- [ ] **Step 1: Extend failing test** to require 12 images: ten base before/after plus organize-menu and organize-quiet; check each signature is RIFF/WEBP and size > 10 KB, and invoke `renderStep` for all 12 states; `node --test test/readme-demo.test.js` → FAIL: missing image.
+- [ ] **Step 2: Implement renderer** using CDP bootstrap proven in `artifacts/drafts/v0413-homepage-demo/render.mjs:12-37`; for each `(step,phase)` call `Runtime.evaluate(window.renderStep(...))`, assert returned `synthetic===true`, capture screenshot, convert with `cwebp -q 84 -resize 960 540 <png> -o <target.webp>`. Use `mkdtemp` for scratch, no delete or move of existing files; before overwriting generated outputs verify resolved target paths are the intended `docs/images/readme-v0414` 12 files.
 - [ ] **Step 3: Run**: `node docs/readme-demo-v0414/render-stills.mjs; node --test test/readme-demo.test.js`; use image reader on representative before/after, fix visual hierarchy or factual errors; record total asset bytes.
 - [ ] **Step 4: Commit**: `git add docs/readme-demo-v0414/render-stills.mjs docs/images/readme-v0414 test/readme-demo.test.js && git commit -m 'docs: render five independent before-after demos'`.
 
