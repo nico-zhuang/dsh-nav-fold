@@ -2180,7 +2180,7 @@ test('custom HEX rejected save keeps dialog retryable then closes after an autho
   });
 });
 
-test('custom HEX draft closes when Host switches profiles but keeps the same raw preferences', async () => {
+test('custom HEX same-raw Host refresh preserves typed draft but requires explicit reopen before saving', async () => {
   await withCustomColorView('rc5', async ({ app, host, open, change }) => {
     await open('a');
     await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
@@ -2189,8 +2189,34 @@ test('custom HEX draft closes when Host switches profiles but keeps the same raw
     await React.act(async () => { app.form.publishValue({ activityPreferences: '' }); await flush(); });
     assert.notEqual(app.form.getSnapshot(), previousSnapshot, 'Host snapshot identity changed without changing its raw preferences');
     assert.equal(app.form.getSnapshot().value.activityPreferences, '');
-    assert.ok(!host.querySelector('[role="dialog"]'), 'a new Host document invalidates even a same-raw draft');
-    assert.equal(app.form.setCalls.length, 0, 'no profile-B write');
+    assert.ok(host.querySelector('[role="dialog"]'), 'same-raw refresh must not erase typed draft');
+    assert.equal(host.querySelector('[data-activity-custom-hex]').value, '#2288AA');
+    assert.equal(host.querySelector('[data-activity-custom-confirm]').disabled, true);
+    assert.match(host.querySelector('[role="dialog"] [role="alert"]').textContent, /设置|配置|档案/);
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); });
+    assert.equal(app.form.setCalls.length, 0, 'possible same-raw profile B receives no stale write');
+    await React.act(async () => { host.querySelector('[data-activity-custom-cancel]').click(); });
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    assert.equal(host.querySelector('[data-activity-custom-hex]').value, '', 'reopen starts from current saved slot, not previous draft');
+  });
+});
+
+test('custom HEX rejected save plus same-raw Host snapshot refresh leaves failed draft visible but blocks retry', async () => {
+  await withCustomColorView('rc5', async ({ app, host, open, change }) => {
+    let attempts = 0;
+    app.form.set = async (field) => { if (field === 'activityPreferences') { attempts++; app.form.publishValue({ activityPreferences: '' }); return false; } return false; };
+    await open('a');
+    await React.act(async () => { host.querySelector('[data-activity-custom-open]').click(); });
+    await change('[data-activity-custom-hex]', '#22AA88');
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); await flush(); });
+    assert.ok(host.querySelector('[role="dialog"]'), 'failed save never closes a drafted picker');
+    assert.equal(host.querySelector('[data-activity-custom-hex]').value, '#22AA88');
+    assert.equal(host.querySelector('[data-activity-custom-confirm]').disabled, true);
+    assert.match(host.querySelector('[role="dialog"] [role="alert"]').textContent, /设置|配置|档案/);
+    await React.act(async () => { host.querySelector('[data-activity-custom-confirm]').click(); });
+    assert.equal(attempts, 1, 'same-raw snapshot refresh blocks a possibly cross-profile retry');
+    assert.equal(app.form.getSnapshot().value.activityPreferences, '');
   });
 });
 
