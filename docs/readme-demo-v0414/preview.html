@@ -32,6 +32,7 @@
     .toggle-line { height: 24px; display: flex; align-items: center; gap: 7px; color: #8fa7bf; }
     .toggle-line::before, .toggle-line::after { content: ''; height: 1px; background: #5b6c7d; flex: 1; }
     .toggle-line svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+    .toggle-line span { font-size: 12px; line-height: 1; color: #d9e9fc; max-width: 140px; white-space: nowrap; }
     .folded .global button { width: 34px; justify-content: center; padding: 5px; }
     .folded .global button span { display: none; }
     .folded .global { grid-template-columns: repeat(6, 1fr); }
@@ -58,7 +59,7 @@
     .quiet-row small { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; color: #9eacbd; }
     .quiet-row svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.5; fill: none; }
     .running-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #68a8ef; margin-left: auto; }
-    .color-mark { position: absolute; left: 3px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: #698ac9; }
+    .color-mark { position: absolute; left: 3px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: #80afff; }
     .organize-button { position: absolute; right: 5px; top: 8px; width: 24px; height: 24px; border: 0; background: #4d5d71; border-radius: 5px; display: grid; place-items: center; }
     .organize-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
     .menu { position: absolute; z-index: 2; left: 141px; top: 172px; width: 166px; padding: 6px; border: 1px solid #627288; border-radius: 8px; background: #303a48; box-shadow: 3px 8px 19px #10131a80; font-size: 12px; }
@@ -79,7 +80,11 @@
     .action { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #485568; padding-top: 13px; font-size: 12px; line-height: 1.55; }
     .action strong { color: #d6e6fa; font-size: 12px; }
     .action span { color: #d3dce7; }
-    .aside { border-top: 1px solid #485568; padding-top: 13px; font-size: 11px !important; color: #afc0d1 !important; }
+    .aside { border-top: 1px solid #485568; padding-top: 13px; font-size: 12px !important; color: #afc0d1 !important; }
+    .remote-flow { display: flex; align-items: center; gap: 5px; padding: 9px 7px; border: 1px solid #485568; border-radius: 6px; color: #d6e6fa; font-size: 11px; line-height: 1.2; }
+    .remote-flow svg { width: 18px; height: 27px; flex: none; fill: none; stroke: #d6e6fa; stroke-width: 1.5; }
+    .remote-flow .flow-link { flex: none; height: 1px; width: 6px; background: #849bb3; }
+    .remote-flow span { max-width: 88px; }
     .foot { border-top: 1px solid #303846; padding: 10px 26px; color: #b9c8da; font-size: 12px; line-height: 16px; }
     @media (max-width: 690px) { .frame { height: auto; min-height: 540px; grid-template-rows: auto auto auto; } .heading { padding: 16px; } .canvas { grid-template-columns: 1fr; padding: 14px 16px 20px; } .app { height: 390px; } .explain { align-self: start; gap: 9px; } .explain h2 { font-size: 17px; } .foot { padding: 12px 16px; } }
     @media (max-width: 390px) { .app { grid-template-columns: 58% 42%; } .content { padding: 13px; } .menu { left: 85px; } }
@@ -95,14 +100,14 @@
           <div class="brand" data-brand>DeepSeek Harness <small>合成界面</small></div>
           <button class="new-session" data-new-session data-position="normal"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12"/></svg>新会话</button>
           <nav class="global" aria-label="全局导航">
-            <button data-global-entry title="主页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v10H3zM9 21v-7h6v7"/></svg><span>主页</span></button>
-            <button data-global-entry title="工作区"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h8l2 2h8v12H3z"/></svg><span>工作区</span></button>
-            <button data-global-entry title="任务"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h12v16H4V4h4m0 5 2 2 4-4M8 16h8"/></svg><span>任务</span></button>
-            <button data-global-entry title="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><span>搜索</span></button>
-            <button data-global-entry title="插件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v6H3v6h6v6h6v-6h6V9h-6V3z"/></svg><span>插件</span></button>
-            <button data-global-entry title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
+            <button data-global-entry aria-label="主页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v10H3zM9 21v-7h6v7"/></svg><span>主页</span></button>
+            <button data-global-entry aria-label="工作区"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h8l2 2h8v12H3z"/></svg><span>工作区</span></button>
+            <button data-global-entry aria-label="任务"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h12v16H4V4h4m0 5 2 2 4-4M8 16h8"/></svg><span>任务</span></button>
+            <button data-global-entry aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><span>搜索</span></button>
+            <button data-global-entry aria-label="插件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v6H3v6h6v6h6v-6h6V9h-6V3z"/></svg><span>插件</span></button>
+            <button data-global-entry aria-label="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
           </nav>
-          <div class="toggle-line" aria-label="全局导航折叠细线"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></div>
+          <div class="toggle-line" aria-label="全局导航折叠细线"><svg data-toggle-arrow viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg><span data-toggle-label hidden></span></div>
           <section class="tree" data-workspace-tree aria-label="合成工作区与会话">
             <div class="tabs" data-dsh-workspace-tabs hidden>
               <button data-view="workspace" aria-label="工作区" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h7l2 2H21v9.5H3z"/></svg></button>
@@ -123,10 +128,10 @@
             </div>
           </section>
         </aside>
-        <div class="menu" data-activity-menu hidden><p>固定在顶部</p><p>免打扰（仅活跃列表）</p><p class="menu-heading">色标</p><div class="swatches" role="group" aria-label="2×3 色标"><i data-activity-swatch aria-label="无色"></i><i data-activity-swatch aria-label="青蓝" style="--swatch:#6babae"></i><i data-activity-swatch aria-label="钴蓝" style="--swatch:#698ac9"></i><i data-activity-swatch aria-label="靛蓝" style="--swatch:#8683b9"></i><i data-activity-swatch aria-label="雾紫" style="--swatch:#af95ba"></i><i data-activity-swatch aria-label="银灰" style="--swatch:#aab3bd"></i></div></div>
+        <div class="menu" data-activity-menu hidden><p>固定在顶部</p><p>免打扰（仅活跃列表）</p><p class="menu-heading">色标</p><div class="swatches" role="group" aria-label="2×3 色标"><i data-activity-swatch aria-label="无色"></i><i data-activity-swatch aria-label="青蓝" style="--swatch:#72cada"></i><i data-activity-swatch aria-label="钴蓝" style="--swatch:#80afff"></i><i data-activity-swatch aria-label="靛蓝" style="--swatch:#b09aff"></i><i data-activity-swatch aria-label="雾紫" style="--swatch:#cf9ceb"></i><i data-activity-swatch aria-label="银灰" style="--swatch:#b2bac8"></i></div></div>
         <section class="content" aria-label="合成会话内容"><p class="crumb">虚构项目 / 星图</p><h2 data-content-title>工作区概览</h2><p data-content-copy>工作区和会话保留在左侧。演示不读取真实 DSH 数据。</p><p class="empty" data-content-status>尚未打开其他会话</p></section>
       </div>
-      <aside class="explain"><h2 data-stage-title>按需开启三栏</h2><p data-stage-description>三栏初始为关，只有用户保存开关后才出现。</p><div class="action"><strong>动作 / 结果</strong><span data-action>设置中尚未启用工作区三栏。</span></div><p class="aside" data-boundary>切换栏目不会自动打开会话；不兼容宿主结构仍保留原生工作区。</p></aside>
+      <aside class="explain"><h2 data-stage-title>按需开启三栏</h2><p data-stage-description>三栏初始为关，只有用户保存开关后才出现。</p><div class="action"><strong>动作 / 结果</strong><span data-action>设置中尚未启用工作区三栏。</span></div><div class="remote-flow" data-remote-flow hidden><svg viewBox="0 0 18 27" role="img" aria-label="合成遥控器图形"><rect x="2" y="1" width="14" height="25" rx="6"/><circle cx="9" cy="8" r="2"/><path d="M6 16h6m-3-3v6"/></svg><span>合成遥控器</span><i class="flow-link" aria-hidden="true"></i><span>无线麦映射</span><i class="flow-link" aria-hidden="true"></i><span>用户自行绑定的快捷键</span></div><p class="aside" data-boundary>切换栏目不会自动打开会话；不兼容宿主结构仍保留原生工作区。</p></aside>
     </section>
     <footer class="foot">独立匿名合成 · 虚构会话与界面 · 非真实 DSH 录屏；遥控器未实拍</footer>
   </main>
@@ -148,13 +153,32 @@
       const row = $('[data-target-row]');
       const rowList = $('[data-row-list]');
       const topGroup = $('[data-top-group]');
+      const focusRow = $('[data-focus-row]');
+      const menu = $('[data-activity-menu]');
+      const label = $('[data-toggle-label]');
+      const arrow = $('[data-toggle-arrow]');
+      function showLabel(name) {
+        label.textContent = name || '';
+        label.hidden = !name;
+        arrow.hidden = Boolean(name);
+      }
+      for (const entry of document.querySelectorAll('[data-global-entry]')) {
+        entry.addEventListener('mouseenter', () => { if ($('[data-app]').classList.contains('folded')) showLabel(entry.getAttribute('aria-label')); });
+        entry.addEventListener('focusin', () => { if ($('[data-app]').classList.contains('folded')) showLabel(entry.getAttribute('aria-label')); });
+        entry.addEventListener('mouseleave', () => showLabel(''));
+        entry.addEventListener('focusout', () => showLabel(''));
+      }
+      $('[data-activity-organize]').addEventListener('click', () => {
+        if (root.dataset.scene === 'organize' && root.dataset.phase !== 'after' && root.dataset.phase !== 'quiet') menu.hidden = !menu.hidden;
+      });
       window.renderStep = function renderStep(step, phase) {
-        if (!Object.hasOwn(titles, step) || !['before', 'after'].includes(phase)) throw new RangeError('Unknown preview step or phase');
+        if (!Object.hasOwn(titles, step) || !(['before', 'after'].includes(phase) || step === 'organize' && ['menu', 'quiet'].includes(phase))) throw new RangeError('Unknown preview step or phase');
         const after = phase === 'after';
+        const organized = step === 'organize' && (after || phase === 'quiet');
         const state = {
           step, phase, folded: step !== 'fold' || after,
           tabsVisible: (step === 'views' && after) || step === 'organize' || step === 'navigate',
-          topGroup: step === 'organize' && after, colorStripe: step === 'organize' && after,
+          topGroup: organized, colorStripe: organized,
           focused: step === 'organize' || step === 'navigate',
           opened: step === 'navigate' && after,
           logoHidden: step === 'logo' && after, synthetic: true
@@ -162,6 +186,8 @@
         root.dataset.scene = step;
         root.dataset.phase = phase;
         $('[data-app]').classList.toggle('folded', state.folded);
+        showLabel(step === 'fold' && after ? '工作区' : '');
+        $('[data-remote-flow]').hidden = step !== 'navigate';
         $('[data-brand]').hidden = state.logoHidden;
         $('[data-new-session]').dataset.position = state.logoHidden ? 'top' : 'normal';
         $('[data-dsh-workspace-tabs]').hidden = !state.tabsVisible;
@@ -172,18 +198,23 @@
         row.classList.toggle('focused', state.focused);
         row.classList.toggle('opened', state.opened);
         $('[data-color-mark]').hidden = !state.colorStripe;
-        $('[data-quiet-row]').hidden = !state.topGroup;
+        $('[data-quiet-row]').hidden = step !== 'organize' || phase !== 'quiet';
         $('[data-activity-organize]').hidden = step !== 'organize';
-        $('[data-activity-menu]').hidden = step !== 'organize' || after;
+        menu.hidden = true;
         topGroup.hidden = !state.topGroup;
         if (state.topGroup) topGroup.append(row);
         else rowList.insertBefore(row, rowList.children[1]);
-        $('[data-phase-label]').textContent = after ? '操作后' : '操作前';
+        if (state.focused) focusRow.focus();
+        else focusRow.blur();
+        if (step === 'organize' && phase === 'menu') $('[data-activity-organize]').click();
+        $('[data-phase-label]').textContent = phase === 'quiet' ? '独立示例' : phase === 'menu' ? '打开菜单' : after ? '操作后' : '操作前';
         $('[data-stage-title]').textContent = titles[step];
         $('[data-stage-description]').textContent = copy[step][0];
         $('[data-action]').textContent = step === 'navigate'
           ? after ? '↑↓ 移动真实焦点 → Enter 打开聚焦会话。' : '用户自行绑定导航入口；↑↓ 移动焦点，尚未按 Enter。'
-          : after ? copy[step][1] : ({ fold: '细线仍处于展开状态，六个全局入口可见。', views: '设置中尚未启用工作区三栏。', organize: '焦点在活跃行；示意 Fold 自己的整理菜单与 2×3 色标。', logo: '三栏关闭，macOS 顶部品牌仍可见。' })[step];
+          : step === 'organize' && phase === 'menu' ? '用户自行绑定的示例组合键 → 打开当前行 Fold 自有菜单；2×3 冷色色标。'
+          : step === 'organize' && phase === 'quiet' ? '另一次独立操作：对“月面观察”选择 Quiet；仅活跃列表变淡，其他运行蓝点仍在。'
+          : after ? copy[step][1] : ({ fold: '细线仍处于展开状态，六个全局入口可见。', views: '设置中尚未启用工作区三栏。', organize: '焦点在活跃行，整理菜单尚未打开。', logo: '三栏关闭，macOS 顶部品牌仍可见。' })[step];
         $('[data-boundary]').textContent = copy[step][2];
         $('[data-content-title]').textContent = state.opened ? '星图概览 · 合成会话' : '工作区概览';
         $('[data-content-status]').textContent = state.opened ? 'Enter 确认后打开' : '尚未打开其他会话';

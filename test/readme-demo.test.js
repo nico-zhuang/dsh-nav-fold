@@ -55,6 +55,12 @@ test('organize gives one focused activity row its own menu then moves it to top 
   assert.equal(before.folded, true); // Leave room for the activity rows in a fixed-size frame.
   assert.equal(before.focused, true);
   assert.equal(before.colorStripe, false);
+  assert.equal(window.document.activeElement, window.document.querySelector('[data-focus-row]'));
+  assert.equal(window.document.querySelector('[data-activity-menu]').hidden, true);
+  const menu = window.renderStep('organize', 'menu');
+  assert.equal(menu.topGroup, false);
+  assert.equal(menu.colorStripe, false);
+  assert.equal(window.document.activeElement, window.document.querySelector('[data-focus-row]'));
   assert.equal(window.document.querySelector('[data-activity-menu]').hidden, false);
   assert.equal(window.document.querySelectorAll('[data-activity-swatch]').length, 6);
   assert.equal(window.document.querySelector('[data-activity-organize]').dataset.menuOwner, 'fold');
@@ -62,14 +68,21 @@ test('organize gives one focused activity row its own menu then moves it to top 
   assert.equal(after.topGroup, true);
   assert.equal(after.colorStripe, true);
   assert.equal(window.document.querySelector('[data-top-group]').hidden, false);
-  assert.equal(window.document.querySelector('[data-color-mark]').getAttribute('data-width'), '3px');
+  assert.equal(window.document.querySelector('[data-target-row]').parentElement, window.document.querySelector('[data-top-group]'));
+  assert.equal(window.getComputedStyle(window.document.querySelector('[data-color-mark]')).width, '3px');
+  assert.equal(window.getComputedStyle(window.document.querySelector('[data-color-mark]')).backgroundColor, 'rgb(128, 175, 255)');
   assert.equal(window.document.querySelector('[data-activity-menu]').hidden, true);
+  assert.equal(window.document.querySelector('[data-quiet-row]').hidden, true);
+  assert.equal(window.document.activeElement, window.document.querySelector('[data-focus-row]'));
   window.close();
 });
 
 test('Quiet only softens its activity row while another running state stays visible', () => {
   const { window } = loadPreview();
   window.renderStep('organize', 'after');
+  assert.equal(window.document.querySelector('[data-quiet-row]').hidden, true);
+  const quiet = window.renderStep('organize', 'quiet');
+  assert.equal(quiet.topGroup, true);
   assert.equal(window.document.querySelector('[data-quiet-row]').hidden, false);
   assert.ok(window.document.querySelector('[data-quiet-row] svg[aria-label="仅活跃列表免打扰"]'));
   assert.ok(window.document.querySelector('[data-running-dot]'));
@@ -81,7 +94,13 @@ test('Quiet only softens its activity row while another running state stays visi
 test('navigation moves focus before Enter and does not claim a default binding', () => {
   const { window } = loadPreview();
   assert.equal(window.renderStep('navigate', 'before').opened, false);
+  assert.equal(window.document.activeElement, window.document.querySelector('[data-focus-row]'));
+  const remote = window.document.querySelector('[data-remote-flow]');
+  assert.equal(remote.hidden, false);
+  assert.ok(remote.querySelector('svg'));
+  assert.match(remote.textContent, /遥控器.*无线麦.*用户自行绑定的快捷键/);
   const after = window.renderStep('navigate', 'after');
+  assert.equal(window.document.activeElement, window.document.querySelector('[data-focus-row]'));
   assert.equal(after.opened, true);
   assert.equal(after.focused, true);
   assert.match(window.document.body.textContent, /用户自行绑定/);
@@ -109,5 +128,38 @@ test('replaying a stage never depends on a previous stage state', () => {
   assert.equal(fresh.tabsVisible, false);
   assert.equal(fresh.logoHidden, false);
   assert.equal(fresh.opened, false);
+  assert.equal(window.document.activeElement, window.document.body);
+  assert.equal(window.document.querySelector('[data-target-row]').parentElement, window.document.querySelector('[data-row-list]'));
+  assert.equal(window.document.querySelector('[data-remote-flow]').hidden, true);
+  window.close();
+});
+
+test('fold displays an immediate center label on hover or focus and restores the arrow on leave', () => {
+  const { window } = loadPreview();
+  window.renderStep('fold', 'after');
+  const label = window.document.querySelector('[data-toggle-label]');
+  assert.equal(label.hidden, false);
+  assert.equal(label.textContent, '工作区');
+  assert.equal(window.document.querySelector('[data-toggle-arrow]').hidden, true);
+  const nav = window.document.querySelectorAll('[data-global-entry]')[3];
+  assert.equal(nav.hasAttribute('title'), false); // No delayed browser tooltip substitutes for Fold's label.
+  nav.dispatchEvent(new window.MouseEvent('mouseenter'));
+  assert.equal(label.textContent, '搜索');
+  nav.dispatchEvent(new window.MouseEvent('mouseleave'));
+  assert.equal(label.hidden, true);
+  nav.focus();
+  assert.equal(label.textContent, '搜索');
+  nav.blur();
+  assert.equal(label.hidden, true);
+  window.close();
+});
+
+test('six cool swatches use the actual shipped dark palette in a 2×3 grid', () => {
+  const { window } = loadPreview();
+  window.renderStep('organize', 'menu');
+  assert.deepEqual([...window.document.querySelectorAll('[data-activity-swatch]')].map((swatch) =>
+    window.getComputedStyle(swatch).getPropertyValue('--swatch').trim()),
+    ['', '#72cada', '#80afff', '#b09aff', '#cf9ceb', '#b2bac8']);
+  assert.equal(window.getComputedStyle(window.document.querySelector('.swatches')).gridTemplateColumns, 'repeat(3,32px)');
   window.close();
 });
