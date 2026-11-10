@@ -1751,6 +1751,27 @@ test('Activity organize menu persists independent top, quiet and color without t
   });
 });
 
+test('custom HEX Host v1 slot renders literally and survives ordinary preset and Quiet writes', async () => {
+  const original = JSON.stringify({ version: 1, customColor: '#c68ae2', sessions: { a: { color: '#c68ae2', top: true, quiet: true } } });
+  await withArchiveView({}, async ({ app, host }) => {
+    const row = host.querySelector('[data-activity-color="#C68AE2"]');
+    assert.ok(row, 'strict HEX is normalized when read from the Host');
+    const marker = row.querySelector('.dsh-nav-fold-color-mark');
+    assert.equal(marker.style.backgroundColor, 'rgb(198, 138, 226)', 'custom marker renders the actual saved HEX');
+    assert.match(marker.getAttribute('aria-label'), /#C68AE2/, 'custom color is accessible without a made-up palette label');
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { host.querySelector('[data-activity-swatch="blue"]').click(); await flush(); });
+    let saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.customColor, '#C68AE2', 'preset selection does not erase the reusable slot');
+    assert.deepEqual(saved.sessions.a, { top: true, quiet: true, color: 'blue' });
+    await React.act(async () => { host.querySelector('[data-session-menu]').click(); });
+    await React.act(async () => { [...host.querySelectorAll('[role="menuitem"]')].find(item => item.textContent === '取消免打扰').click(); await flush(); });
+    saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
+    assert.equal(saved.customColor, '#C68AE2', 'ordinary Quiet write keeps the slot');
+    assert.deepEqual(saved.sessions.a, { top: true, color: 'blue' });
+  }, { activityPreferences: original });
+});
+
 test('Activity color persists through a new localhost port using the same Host profile value', async () => {
   let persisted;
   await withArchiveView({}, async ({ app, host }) => {

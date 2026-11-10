@@ -329,6 +329,27 @@ test('Activity saved preferences reject unknown fields, unsafe colors and malfor
   } finally { dispose(); }
 });
 
+test('Activity HEX parser accepts strict six-digit values and rejects unsafe custom data', () => {
+  const { client, dispose } = start();
+  try {
+    const { normalizeActivityHex, parseActivityCustomColor, parseActivityPreferences } = client.__test__;
+    assert.equal(normalizeActivityHex('#c68ae2'), '#C68AE2');
+    for (const unsafe of ['#FFF', '#11223344', ' #112233', '#112233 ', 'url(x)', 'var(--color)', 123, null]) {
+      assert.equal(normalizeActivityHex(unsafe), null, `reject ${String(unsafe)}`);
+    }
+    const raw = JSON.stringify({ version: 1, customColor: '#c68ae2', sessions: {
+      a: { color: '#c68ae2', quiet: true }, b: { color: 'url(x)', top: true }, c: { color: '#11223344' }, d: { color: 'green' },
+    } });
+    assert.equal(parseActivityCustomColor(raw), '#C68AE2');
+    assert.deepEqual(JSON.parse(JSON.stringify(parseActivityPreferences(raw))), {
+      a: { quiet: true, color: '#C68AE2' }, b: { top: true }, d: { color: 'green' },
+    });
+    assert.equal(parseActivityCustomColor(JSON.stringify({ version: 1, customColor: 'url(x)', sessions: {} })), null);
+    assert.equal(parseActivityCustomColor(JSON.stringify({ version: 2, customColor: '#112233', sessions: {} })), null);
+    assert.equal(parseActivityCustomColor('{invalid'), null);
+  } finally { dispose(); }
+});
+
 test('Activity top pin is separate from Favorites and bypasses the recent cap', () => {
   const { client, dispose } = start();
   try {
