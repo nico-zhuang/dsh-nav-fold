@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fold · v0.4.14 分步示意</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #10131a; color: #edf1f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    [hidden] { display: none !important; }
+    ::selection { color: #111b30; background: #afd5ff; }
+    button { font: inherit; color: inherit; }
+    button:focus-visible { outline: 2px solid #a9cfff; outline-offset: 2px; }
+    .frame { width: min(100%, 960px); height: 540px; margin: auto; display: grid; grid-template-rows: 69px minmax(0, 1fr) 37px; overflow: hidden; background: #10131a; }
+    .heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 26px; border-bottom: 1px solid #303846; }
+    .heading h1 { font-size: 21px; line-height: 1.25; letter-spacing: -.025em; font-weight: 620; margin: 0; }
+    .heading p { margin: 5px 0 0; font-size: 12px; color: #b9c6d5; }
+    .phase { flex: none; border: 1px solid #63788f; border-radius: 5px; font-size: 12px; padding: 5px 10px; letter-spacing: .02em; }
+    .canvas { min-height: 0; padding: 16px 26px; display: grid; grid-template-columns: minmax(0, 1fr) 255px; gap: 24px; }
+    .app { position: relative; min-height: 0; display: grid; grid-template-columns: 245px minmax(0,1fr); border: 1px solid #374355; border-radius: 10px; overflow: hidden; background: #171c25; box-shadow: 0 12px 26px rgba(0,0,0,.24); }
+    .sidebar { display: flex; flex-direction: column; gap: 4px; min-width: 0; background: #202632; border-right: 1px solid #394454; padding: 11px 8px; }
+    .brand { height: 39px; padding: 9px 10px; font-weight: 680; letter-spacing: .01em; font-size: 15px; }
+    .brand small { margin-left: 4px; font-weight: 400; font-size: 12px; color: #9eacbc; }
+    .new-session { min-height: 31px; padding: 6px 10px; border-radius: 6px; border: 1px solid #526074; background: #2b3544; text-align: left; font-size: 12px; }
+    .new-session[data-position="top"] { order: -2; margin-top: 3px; }
+    .new-session svg { width: 12px; height: 12px; margin-right: 5px; stroke: currentColor; stroke-width: 1.7; fill: none; vertical-align: -1px; }
+    .global { border-top: 1px solid #394454; margin-top: 8px; padding-top: 8px; display: grid; gap: 2px; }
+    .global button { height: 29px; display: flex; align-items: center; gap: 10px; padding: 5px 9px; background: none; border: 0; border-radius: 5px; text-align: left; color: #c9d3e0; font-size: 12px; white-space: nowrap; }
+    .global svg, .tree svg { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .global button:first-child { background: #374358; color: #fff; }
+    .toggle-line { height: 24px; display: flex; align-items: center; gap: 7px; color: #8fa7bf; }
+    .toggle-line::before, .toggle-line::after { content: ''; height: 1px; background: #5b6c7d; flex: 1; }
+    .toggle-line svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+    .folded .global button { width: 34px; justify-content: center; padding: 5px; }
+    .folded .global button span { display: none; }
+    .folded .global { grid-template-columns: repeat(6, 1fr); }
+    .folded .toggle-line { color: #b4d5f5; }
+    .tree { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+    .tabs { margin: 1px 3px 7px; display: grid; grid-template-columns: repeat(3,1fr); padding: 3px; min-height: 31px; background: #333c49; border-radius: 8px; }
+    .tabs button { border: 0; border-radius: 5px; background: transparent; display: grid; place-items: center; min-width: 0; padding: 5px 2px; }
+    .tabs button[aria-pressed="true"] { background: #536071; }
+    .tabs svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .tree-label { margin: 6px 9px 4px; font-size: 12px; color: #a8b8ca; }
+    .tree-row { min-height: 28px; padding: 6px 10px; border-radius: 6px; font-size: 12px; color: #d7e0ea; display: flex; align-items: center; gap: 7px; }
+    .tree-row.nested { padding-left: 25px; }
+    .tree-row.active { background: #354359; }
+    .top-group { margin: 4px 0; border-bottom: 1px solid #445062; padding-bottom: 5px; }
+    .frame[data-scene="organize"] .tree > .tree-label, .frame[data-scene="organize"] [data-row-list] > .tree-row:first-child { display: none; }
+    .top-group .tree-label { margin-top: 1px; }
+    .session-row { position: relative; border-radius: 6px; margin: 2px 3px; min-height: 43px; }
+    .session-row .main { display: block; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 5px 34px 5px 10px; background: transparent; font-size: 12px; }
+    .session-row .main strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+    .session-row .main small { display: block; margin-top: 3px; color: #adc0d1; font-size: 12px; }
+    .session-row.focused .main { outline: 2px solid #bad7f6; outline-offset: -2px; background: #39475d; }
+    .session-row.opened .main { background: #354b68; }
+    .quiet-row { margin: 3px 5px; padding: 6px 10px; min-height: 41px; border-radius: 6px; background: #343d49; color: #b7c2ce; font-size: 12px; }
+    .quiet-row small { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; color: #9eacbd; }
+    .quiet-row svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+    .running-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #68a8ef; margin-left: auto; }
+    .color-mark { position: absolute; left: 3px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: #698ac9; }
+    .organize-button { position: absolute; right: 5px; top: 8px; width: 24px; height: 24px; border: 0; background: #4d5d71; border-radius: 5px; display: grid; place-items: center; }
+    .organize-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .menu { position: absolute; z-index: 2; left: 141px; top: 172px; width: 166px; padding: 6px; border: 1px solid #627288; border-radius: 8px; background: #303a48; box-shadow: 3px 8px 19px #10131a80; font-size: 12px; }
+    .menu p { margin: 0; padding: 6px 7px; }
+    .menu .menu-heading { color: #b5c4d3; border-top: 1px solid #586579; margin-top: 4px; }
+    .swatches { display: grid; grid-template-columns: repeat(3,32px); gap: 4px; padding: 2px 7px 5px; }
+    .swatches i { width: 32px; height: 32px; display: grid; place-items: center; font-size: 12px; font-style: normal; }
+    .swatches i::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--swatch); }
+    .swatches i:first-child::after { background: none; border: 1px solid #a9b6c4; }
+    .content { min-width: 0; padding: 20px; color: #aebdcd; }
+    .content .crumb { font-size: 12px; margin: 2px 0 24px; }
+    .content h2 { color: #e4eaf2; font-size: 18px; font-weight: 580; line-height: 1.4; margin: 0 0 15px; }
+    .content p { max-width: 28ch; font-size: 12px; line-height: 1.7; }
+    .content .empty { margin-top: 40px; border-top: 1px solid #394454; padding-top: 14px; }
+    .explain { align-self: center; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+    .explain h2 { margin: 0; font-weight: 620; font-size: 19px; line-height: 1.4; }
+    .explain p { margin: 0; font-size: 14px; line-height: 1.6; color: #c2cedc; }
+    .action { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #485568; padding-top: 13px; font-size: 12px; line-height: 1.55; }
+    .action strong { color: #d6e6fa; font-size: 12px; }
+    .action span { color: #d3dce7; }
+    .aside { border-top: 1px solid #485568; padding-top: 13px; font-size: 11px !important; color: #afc0d1 !important; }
+    .foot { border-top: 1px solid #303846; padding: 10px 26px; color: #b9c8da; font-size: 12px; line-height: 16px; }
+    @media (max-width: 690px) { .frame { height: auto; min-height: 540px; grid-template-rows: auto auto auto; } .heading { padding: 16px; } .canvas { grid-template-columns: 1fr; padding: 14px 16px 20px; } .app { height: 390px; } .explain { align-self: start; gap: 9px; } .explain h2 { font-size: 17px; } .foot { padding: 12px 16px; } }
+    @media (max-width: 390px) { .app { grid-template-columns: 58% 42%; } .content { padding: 13px; } .menu { left: 85px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="frame" data-scene="views" data-phase="before">
+    <header class="heading"><div><h1>Fold · v0.4.14</h1><p>五个独立动作，各有前后结果</p></div><span class="phase" data-phase-label>操作前</span></header>
+    <section class="canvas" aria-label="离线匿名合成演示">
+      <div class="app" data-app>
+        <aside class="sidebar" aria-label="合成侧边栏">
+          <div class="brand" data-brand>DeepSeek Harness <small>合成界面</small></div>
+          <button class="new-session" data-new-session data-position="normal"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12"/></svg>新会话</button>
+          <nav class="global" aria-label="全局导航">
+            <button data-global-entry title="主页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v10H3zM9 21v-7h6v7"/></svg><span>主页</span></button>
+            <button data-global-entry title="工作区"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h8l2 2h8v12H3z"/></svg><span>工作区</span></button>
+            <button data-global-entry title="任务"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h12v16H4V4h4m0 5 2 2 4-4M8 16h8"/></svg><span>任务</span></button>
+            <button data-global-entry title="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><span>搜索</span></button>
+            <button data-global-entry title="插件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v6H3v6h6v6h6v-6h6V9h-6V3z"/></svg><span>插件</span></button>
+            <button data-global-entry title="设置"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
+          </nav>
+          <div class="toggle-line" aria-label="全局导航折叠细线"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></div>
+          <section class="tree" data-workspace-tree aria-label="合成工作区与会话">
+            <div class="tabs" data-dsh-workspace-tabs hidden>
+              <button data-view="workspace" aria-label="工作区" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h7l2 2H21v9.5H3z"/></svg></button>
+              <button data-view="activity" aria-label="活动" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h5l2-4 4 8 2-5 2 1h5"/></svg></button>
+              <button data-view="favorites" aria-label="收藏" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(-24 12 12)"><path d="M8.5 5.5h7l-1 4 2 3v1H7.5v-1l2-3-1-4Z"/><path d="M12 13.5v7"/></g></svg></button>
+            </div>
+            <p class="tree-label" data-tree-title>工作区</p>
+            <div class="top-group" data-top-group hidden><p class="tree-label">顶部固定</p></div>
+            <div data-row-list>
+              <div class="tree-row"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14l-7 7z"/></svg>虚构项目 · 星图</div>
+              <div class="session-row" data-target-row>
+                <span class="color-mark" data-color-mark data-width="3px" hidden></span>
+                <button class="main" data-focus-row><strong>星图概览 · 合成会话</strong><small>虚构项目 · 星图</small></button>
+                <button class="organize-button" data-activity-organize data-menu-owner="fold" aria-label="Fold 自有活跃整理菜单" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+              </div>
+              <div class="tree-row nested">排期与草图 · 合成会话 <span class="running-dot" data-running-dot aria-label="仍在运行"></span></div>
+              <div class="quiet-row" data-quiet-row hidden>月面观察 · 合成会话<small>仅活跃列表视觉变淡 <svg viewBox="0 0 16 16" aria-label="仅活跃列表免打扰"><path d="M13 11.2A6 6 0 0 1 4.8 3a6 6 0 1 0 8.2 8.2Z"/></svg></small></div>
+            </div>
+          </section>
+        </aside>
+        <div class="menu" data-activity-menu hidden><p>固定在顶部</p><p>免打扰（仅活跃列表）</p><p class="menu-heading">色标</p><div class="swatches" role="group" aria-label="2×3 色标"><i data-activity-swatch aria-label="无色"></i><i data-activity-swatch aria-label="青蓝" style="--swatch:#6babae"></i><i data-activity-swatch aria-label="钴蓝" style="--swatch:#698ac9"></i><i data-activity-swatch aria-label="靛蓝" style="--swatch:#8683b9"></i><i data-activity-swatch aria-label="雾紫" style="--swatch:#af95ba"></i><i data-activity-swatch aria-label="银灰" style="--swatch:#aab3bd"></i></div></div>
+        <section class="content" aria-label="合成会话内容"><p class="crumb">虚构项目 / 星图</p><h2 data-content-title>工作区概览</h2><p data-content-copy>工作区和会话保留在左侧。演示不读取真实 DSH 数据。</p><p class="empty" data-content-status>尚未打开其他会话</p></section>
+      </div>
+      <aside class="explain"><h2 data-stage-title>按需开启三栏</h2><p data-stage-description>三栏初始为关，只有用户保存开关后才出现。</p><div class="action"><strong>动作 / 结果</strong><span data-action>设置中尚未启用工作区三栏。</span></div><p class="aside" data-boundary>切换栏目不会自动打开会话；不兼容宿主结构仍保留原生工作区。</p></aside>
+    </section>
+    <footer class="foot">独立匿名合成 · 虚构会话与界面 · 非真实 DSH 录屏；遥控器未实拍</footer>
+  </main>
+  <script>
+    (() => {
+      const titles = {
+        fold: '收起全局导航', views: '按需开启三栏', organize: '只整理当前聚焦的活跃行',
+        navigate: '会话导航与无线麦映射', logo: 'macOS 独立隐藏 Logo'
+      };
+      const copy = {
+        fold: ['点击细线，六个全局入口收成图标；工作区和会话不消失。', '点击细线，图标保留，悬停即时显名。', '全局导航与工作区树是两个区域。'],
+        views: ['三栏初始为关，只有用户保存开关后才出现。', '在插件设置中主动保存“工作区／活动／收藏”。', '切换栏目不会自动打开会话；不兼容宿主结构仍保留原生工作区。'],
+        organize: ['活跃会话主按钮先取得键盘焦点，再打开该行自己的整理菜单。', '用户自行绑定的示例组合键 → 固定在顶部 → 选钴蓝色标。', 'rc.1 用 Fold 独立整理按钮，不碰宿主三点；rc.5 用 Fold 自有兼容菜单。Quiet 只改变活跃列表视觉。'],
+        navigate: ['先移动焦点；只有按 Enter 才会打开聚焦会话。', '入口快捷键由用户自行绑定；↑↓ 移焦点、←→ 切栏目、Enter 确认。', '无线麦映射仅为遥控器使用示意，非配对实拍；无焦点／弹窗／终端不触发整理。'],
+        logo: ['仅在 macOS 单独保存隐藏顶部 Logo 开关，新会话上移。', '保存 macOS 去 Logo 开关；工作区三栏仍关闭。', '这一选项不是三栏的前置条件，也不宣称其他平台适用。']
+      };
+      const root = document.querySelector('.frame');
+      const $ = (selector) => document.querySelector(selector);
+      const row = $('[data-target-row]');
+      const rowList = $('[data-row-list]');
+      const topGroup = $('[data-top-group]');
+      window.renderStep = function renderStep(step, phase) {
+        if (!Object.hasOwn(titles, step) || !['before', 'after'].includes(phase)) throw new RangeError('Unknown preview step or phase');
+        const after = phase === 'after';
+        const state = {
+          step, phase, folded: step !== 'fold' || after,
+          tabsVisible: (step === 'views' && after) || step === 'organize' || step === 'navigate',
+          topGroup: step === 'organize' && after, colorStripe: step === 'organize' && after,
+          focused: step === 'organize' || step === 'navigate',
+          opened: step === 'navigate' && after,
+          logoHidden: step === 'logo' && after, synthetic: true
+        };
+        root.dataset.scene = step;
+        root.dataset.phase = phase;
+        $('[data-app]').classList.toggle('folded', state.folded);
+        $('[data-brand]').hidden = state.logoHidden;
+        $('[data-new-session]').dataset.position = state.logoHidden ? 'top' : 'normal';
+        $('[data-dsh-workspace-tabs]').hidden = !state.tabsVisible;
+        for (const tab of document.querySelectorAll('[data-dsh-workspace-tabs] button')) {
+          tab.setAttribute('aria-pressed', String(tab.dataset.view === (step === 'organize' || step === 'navigate' ? 'activity' : 'workspace')));
+        }
+        $('[data-tree-title]').textContent = step === 'organize' || step === 'navigate' ? '活动 · 活跃会话' : '工作区';
+        row.classList.toggle('focused', state.focused);
+        row.classList.toggle('opened', state.opened);
+        $('[data-color-mark]').hidden = !state.colorStripe;
+        $('[data-quiet-row]').hidden = !state.topGroup;
+        $('[data-activity-organize]').hidden = step !== 'organize';
+        $('[data-activity-menu]').hidden = step !== 'organize' || after;
+        topGroup.hidden = !state.topGroup;
+        if (state.topGroup) topGroup.append(row);
+        else rowList.insertBefore(row, rowList.children[1]);
+        $('[data-phase-label]').textContent = after ? '操作后' : '操作前';
+        $('[data-stage-title]').textContent = titles[step];
+        $('[data-stage-description]').textContent = copy[step][0];
+        $('[data-action]').textContent = step === 'navigate'
+          ? after ? '↑↓ 移动真实焦点 → Enter 打开聚焦会话。' : '用户自行绑定导航入口；↑↓ 移动焦点，尚未按 Enter。'
+          : after ? copy[step][1] : ({ fold: '细线仍处于展开状态，六个全局入口可见。', views: '设置中尚未启用工作区三栏。', organize: '焦点在活跃行；示意 Fold 自己的整理菜单与 2×3 色标。', logo: '三栏关闭，macOS 顶部品牌仍可见。' })[step];
+        $('[data-boundary]').textContent = copy[step][2];
+        $('[data-content-title]').textContent = state.opened ? '星图概览 · 合成会话' : '工作区概览';
+        $('[data-content-status]').textContent = state.opened ? 'Enter 确认后打开' : '尚未打开其他会话';
+        return state;
+      };
+      window.renderStep('views', 'before');
+    })();
+  </script>
+</body>
+</html>
