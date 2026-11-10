@@ -37,8 +37,8 @@
 - [x] **Step 1: Write failing test**: assert source contains a selector that zeroes *both* bottom radii when a Quiet sibling follows and a selector that zeroes *both* top radii when a Quiet sibling precedes, each scoped to `.dsh-nav-fold-session-quiet`; also render two consecutive Quiet rows and assert they are adjacent siblings in the same Activity group, with a non-Quiet row between groups breaking adjacency.
 - [x] **Step 2: Verify RED**: `node --test --test-name-pattern='adjacent Quiet' test/safe-views.test.js` fails due missing inner-corner selectors (no production edits yet).
 - [x] **Step 3: Implement minimal CSS**: append `.dsh-nav-fold-session-quiet:has(+ .dsh-nav-fold-session-quiet) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }` and `.dsh-nav-fold-session-quiet + .dsh-nav-fold-session-quiet { border-top-left-radius: 0; border-top-right-radius: 0; }` after the existing 7px `.dsh-nav-fold-session` radius. Do not touch SessionRow props, sorting, persistence, colors or menus.
-- [ ] **Step 4: Verify GREEN + review**: rerun focused and complete serial tests, `node --check lib/client.js`, `git diff --check` and Impeccable detector; independent read-only source review confirms no group boundary bleed. Commit source/tests/spec/plan only in feature branch.
-- [ ] **Step 5: QA install & GUI**: produce a new local tarball from the reviewed commit, install it only into `navfold-qa-20261111`, restart its own Web server, authenticate at its newly printed loopback URL, inspect actual Quiet single-line height and consecutive seam at the narrow sidebar width. Configure QA-only activity preferences without opening or mutating shared real sessions; if needed use a disposable synthetic view, clearly label it. Verify current web profile still has v0.4.13 and was untouched; report any untested items.
+- [x] **Step 4: Verify GREEN + review**: rerun focused and complete serial tests, `node --check lib/client.js`, `git diff --check` and Impeccable detector; independent read-only source review confirms no group boundary bleed. Commit source/tests/spec/plan only in feature branch.
+- [x] **Step 5: QA install & GUI**: produce a new local tarball from the reviewed commit, install it only into `navfold-qa-20261111`, restart its own Web server, authenticate at its newly printed loopback URL, inspect actual Quiet single-line height and consecutive seam at the narrow sidebar width. Configure QA-only activity preferences without opening or mutating shared real sessions; if needed use a disposable synthetic view, clearly label it. Verify current web profile still has v0.4.13 and was untouched; report any untested items.
 
 ## Self-review
 
@@ -48,4 +48,11 @@ The sole visual behavior change is the approved Quiet Activity row. Workspace re
 
 - RED：原实现没有 Quiet 单行标题容器，聚焦测试 1 通过／1 失败；GREEN：单行 DOM、恢复和 Favorites 隔离的聚焦测试 2／2 通过。
 - 完整串行 `node --test --test-concurrency=1 test/*.test.js` **171／171** 通过；`node --check lib/client.js` 与 `git diff --check` 通过。并行 README 截图测试已有可复现的零字节图片竞态，未在此特性改动。
-- Impeccable 检测只报既有 `lib/client.js:153` 动画曲线 advisory（本次未触碰）；独立只读源码复审给出规格符合／代码质量通过。尚未在真实 DSH 最窄侧栏或系统 GUI 做像素尺寸验收，不能把 jsdom 断言称作实机视觉验收；没有安装、推送、发布。
+- Impeccable 检测只报既有 `lib/client.js:153` 动画曲线 advisory（本次未触碰）；独立只读源码复审给出规格符合／代码质量通过。第一轮单行提交时尚未做真实 GUI 验收；第二轮以下方 QA 记录补足。没有安装到现用 profile、推送或发布。
+
+## 连片底色及本机 QA 实测（2026-11-11）
+
+- 新增相邻 Quiet 回归先 RED（缺少下角直角规则），加两条 CSS 选择器后 GREEN；完整串行测试 **172／172** 通过，源码语法、差异空白检查通过。Impeccable 仍只报既有 `lib/client.js:153` advisory。独立只读审查给出规格符合／代码质量通过，没有 Critical/Important。
+- 从 `f545725` 打包，仅安装到新建 `navfold-qa-20261111` Web profile 的本地 `dsh-nav-fold@0.4.14` 测试包；当前 `desktop` profile 依旧指向其原 `dsh-nav-fold-0.4.13.tgz`。测试 profile 与现有 DSH **共享会话列表**，测试期间只操作测试 profile 的活跃整理偏好，不打开会话或修改会话正文；QA profile 不是数据存储完全隔离的沙箱。
+- 真实 DSH 0.2.2-rc.1 / Chromium：在 **272px 侧栏**，普通行 45px、Quiet 行 27px，标题＋月亮同行，没有可见工作区副行，按钮可访问、`aria-label` 仍含工作区，标题/月亮与操作按钮不交叠。连续三条的计算圆角依次为顶角 7px／底角 0px、中间四角 0px、顶角 0px／底角 7px，垂直接缝 0px；普通行和临时「顶部固定」分组标题／分隔线都截断连片，单独行保留圆角。收藏 Tab 的 4 行均非 Quiet、均有工作区副行。
+- 色标：QA 对话框打开时不写入，无效 `#GGGGGG` 禁用确认；有效 `#5480D6` 保存后 Quiet 行有 3px 蓝色条，与连片底色和 27px 高度共存。刷新页面后三条 Quiet、外角与自定义蓝色仍在。实际深色与通过浏览器仅模拟 `prefers-color-scheme: light` 的浅色截图均检查了可读性与接缝；窄视口 750px 下侧栏仍是 272px 且无标题/月亮/菜单重叠。**未手动将侧栏拖至物理最小宽度，也未实测蓝牙遥控器或跨 profile 写入竞态。** 测试配置未并入现用 profile，未推送/发布。
