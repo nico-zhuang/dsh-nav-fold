@@ -18,4 +18,4 @@
 
 ## 发布门槛
 
-C 是新布局，在功能分支实现并回归；不能借用户选 C 推定其豁免既存跨 profile 相同 raw 的在途 Host 写入竞态。未证明 Host.set 按调用时 profile 原子归属或具备 profile-scoped/CAS 写入前，不发布含自定义色的正式版。既有 desktop v0.4.14 本机试用与 v0.4.14 公开 tag 不随本设计文档更改。
+C 是新布局，在功能分支实现并回归；不能借用户选 C 推定其豁免跨 profile 同 raw 在途写入。随后基于当前打包 DSH 源码验证了**默认桌面双 origin** 的实际边界：各页排队中的 `form.set` 最终使用本页相对路径 HTTP POST；Host `runProfile` 固定提供每个 profile 的 `dir/patchPath`，配置编辑器锁定该目录并核对当前 entry。当前 desktop（49309）与独立 QA（64157）各有自己的页面／Host，上述默认模式下 A 在队列中或已发出的写入都不会落到 B。自定义 RPC/fetch 覆盖、同 origin 反向代理重定向及原端口由另一 profile 接管**未获此证据覆盖**，不得宣称这类部署也安全。既有 desktop v0.4.14 本机试用与 v0.4.14 公开 tag 不因本设计文档回写而改变。

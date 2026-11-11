@@ -27,12 +27,12 @@ test('README presents five stand-alone synthetic scenes without losing release a
   assert.match(intro, /独立匿名合成示意/);
   assert.match(intro, /不是实际 DSH 录屏/);
   assert.match(intro, /均无预设键位/);
-  const embeds = [...intro.matchAll(/<img alt="[^"]+" src="(docs\/images\/readme-v0414\/[^"]+\.webp)">/g)].map((match) => match[1]);
-  const mobileSources = [...intro.matchAll(/<source media="\(max-width: 600px\)" srcset="(docs\/images\/readme-v0414\/[^"]+-mobile\.webp)">/g)].map((match) => match[1]);
+  const embeds = [...intro.matchAll(/<img alt="[^"]+" src="(docs\/images\/readme-v041(?:4|5)\/[^"]+\.webp)">/g)].map((match) => match[1]);
+  const mobileSources = [...intro.matchAll(/<source media="\(max-width: 600px\)" srcset="(docs\/images\/readme-v041(?:4|5)\/[^"]+-mobile\.webp)">/g)].map((match) => match[1]);
   assert.deepEqual(embeds, [
     'docs/images/readme-v0414/fold-after.webp', 'docs/images/readme-v0414/fold-before.webp',
     'docs/images/readme-v0414/views-after.webp', 'docs/images/readme-v0414/views-before.webp',
-    'docs/images/readme-v0414/organize-menu.webp', 'docs/images/readme-v0414/organize-after.webp',
+    'docs/images/readme-v0415/organize-menu.webp', 'docs/images/readme-v0414/organize-after.webp',
     'docs/images/readme-v0414/navigate-after.webp', 'docs/images/readme-v0414/navigate-before.webp',
     'docs/images/readme-v0414/logo-after.webp', 'docs/images/readme-v0414/logo-before.webp',
   ]);
@@ -43,8 +43,8 @@ test('README presents five stand-alone synthetic scenes without losing release a
   assert.ok(organize.indexOf('organize-after.webp') < organize.indexOf('<details>'), 'organize menu/result must both be visible without expanding details');
   assert.match(intro, /docs\/images\/demo\.gif/);
   assert.match(intro, /releases\/download\/v0\.4\.1\/dsh-nav-fold-demo\.mp4/);
-  assert.match(readme, /releases\/download\/v0\.4\.14\/dsh-nav-fold-0\.4\.14\.tgz/);
-  assert.match(readme, /上一公开版.*v0\.4\.13/s);
+  assert.match(readme, /releases\/download\/v0\.4\.15\/dsh-nav-fold-0\.4\.15\.tgz/);
+  assert.match(readme, /上一公开版.*v0\.4\.14/s);
   assert.doesNotMatch(intro, /(?:默认|预设).{0,6}(?:快捷键|键位).{0,3}(?:已绑定|已设置)/);
 });
 

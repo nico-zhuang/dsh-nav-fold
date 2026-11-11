@@ -42,6 +42,6 @@
 - Consumes: Task 1 已验证的功能分支；Host profile-bound/CAS 写入契约。
 - Produces: 可信跨 profile 写入防串证据，或明确停止 v0.4.15 发布。
 
-- [ ] **Step 1: 用同 raw profile A/B、已在途异步 form.set 的受控夹具写 RED。** 让延迟写入真正落到当前 B，断言 B 未被 A 的更改覆盖；原客户端预期失败。
-- [ ] **Step 2: 若 Host 的调用时 profile 绑定可由源码或运行行为验证，加入锁定该契约的测试；否则须先有 Host 原子 profile-scoped/CAS API 才能修复。** 禁止用写后检查／回滚充当原子保护。
-- [ ] **Step 3: 仅在门槛通过后才进入 v0.4.15 版本号、文档、主干、Tag、GitHub Release 操作；否则功能分支保留且不发布。**
+- [x] **Step 1: 重现默认双 origin 的边界并取得完整 Host 源码链。** 本机 desktop（49309）与独立 QA（64157）分别运行各自 profile；打包前端只设置 `ownsHost/streamBaseUrl`，无 RPC/fetch override；表单控制器虽异步排队，但请求最终使用本页相对 URL，Host `profileContext` 在本次 `runProfile` 中固定 `dir/patchPath`，`ConfigEditor.edit` 锁定并写该目录。故默认模式排队与已发出 A 写入均不可能落到 B。此处是打包源码静态证明，不谎称做过直接的跨端口破坏性写入测试。
+- [x] **Step 2: 界定证明范围。** 明确源码证明限于默认页面／Host 各 profile 独立 origin；自定义传输、同 origin 动态代理、A 端口复用给 B 不在范围内。不能把写后检查／回滚当原子保护，也不能把该结论外推到未核实部署。
+- [ ] **Step 3: 在默认模式发布门槛通过后再完成 v0.4.15 版本号、文档、主干、Tag、GitHub Release 操作。** 发布前复验测试与 npm 六文件包一致性，留下 SHA-256 与回退入口；若后续发现 profile 迁移复用同一 origin，立即暂停发布并回到 Host 原子身份保护方案。**
