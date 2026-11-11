@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fold · v0.4.15 活跃整理菜单 · 匿名合成</title>
+<style>
+  :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #edf1f6; background: #10131a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-width: 320px; }
+  ::selection { background: #acd3fb; color: #111e2a; }
+  button { font: inherit; color: inherit; }
+  button:focus-visible { outline: 2px solid #bbd9ff; outline-offset: 2px; }
+  .frame { width: 960px; height: 540px; margin: auto; overflow: hidden; display: grid; grid-template-rows: 70px 433px 37px; background: #10131a; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 26px; border-bottom: 1px solid #303846; }
+  h1 { font-size: 21px; line-height: 1.25; letter-spacing: -.025em; font-weight: 630; margin: 0; }
+  header p { margin: 5px 0 0; font-size: 12px; color: #c0cfde; }
+  .version { border: 1px solid #63788f; border-radius: 5px; padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+  .canvas { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 22px; padding: 15px 26px; }
+  .app { position: relative; height: 403px; display: grid; grid-template-columns: 238px 1fr; overflow: hidden; border: 1px solid #374355; border-radius: 10px; background: #171c25; box-shadow: 0 12px 26px #0004; }
+  .sidebar { background: #202632; border-right: 1px solid #394454; padding: 11px 8px; }
+  .brand { padding: 8px 9px; height: 38px; font-size: 14px; font-weight: 660; }
+  .brand small { color: #b3c0cc; font-size: 11px; font-weight: 400; }
+  .new { height: 31px; border: 1px solid #526074; border-radius: 6px; background: #2b3544; padding: 7px 10px; font-size: 12px; }
+  .nav { display: flex; justify-content: space-around; margin: 10px 0 7px; border-top: 1px solid #394454; padding: 8px 0 2px; color: #c9d3e0; }
+  .nav svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .divider { height: 16px; display: flex; align-items: center; color: #adc7e3; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #5b6c7d; }
+  .divider svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .tabs { display: flex; margin: 7px 3px 9px; height: 32px; padding: 3px; background: #333c49; border-radius: 8px; }
+  .tabs span { display: grid; place-items: center; flex: 1; }
+  .tabs span.active { border-radius: 5px; background: #536071; }
+  .tabs svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+  .tree-title { color: #b8c6d4; font-size: 12px; padding: 1px 8px 7px; }
+  .tree-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #d4deea; padding: 6px 10px; }
+  .tree-row.sub { padding-left: 20px; color: #a8bacd; }
+  .row { position: relative; height: 45px; margin: 1px 3px; border-radius: 6px; padding: 7px 36px 4px 12px; background: #39475d; outline: 2px solid #bad7f6; outline-offset: -2px; font-size: 12px; }
+  .row strong { display: block; font-weight: 550; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .row small { display: block; margin-top: 3px; color: #b5c4d3; font-size: 11px; }
+  .stripe { position: absolute; left: 3px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: #5a84d3; }
+  .row-action { position: absolute; right: 6px; top: 9px; display: grid; place-items: center; height: 25px; width: 25px; border-radius: 5px; background: #56677b; }
+  .row-action svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+  .content { padding: 20px; font-size: 12px; color: #bcc8d5; }
+  .content h2 { margin: 24px 0 11px; font-size: 18px; font-weight: 550; color: #e5ebf4; }
+  .content p { max-width: 23ch; line-height: 1.6; }
+  .content .crumb { margin: 0; font-size: 11px; }
+  .content .line { border-top: 1px solid #394454; margin-top: 34px; padding-top: 14px; }
+  .menu { position: absolute; z-index: 2; left: 205px; top: 146px; width: 214px; height: 180px; transform: scale(1.32); transform-origin: top left; padding: 5px 4px 5px; background: #26272b; border: 1px solid #41444b; border-radius: 11px; box-shadow: 3px 9px 22px #0009; color: #f0f1f3; font-size: 11px; }
+  .menu > button { width: 100%; height: 34px; padding: 6px 7px; border: 0; background: none; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+  .menu svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .colors { width: 206px; height: 68px; border-top: 1px solid #41444b; padding-top: 6px; }
+  .colors > span { display: block; padding-left: 7px; color: #b3b5bc; font-size: 11px; line-height: 16px; }
+  .grid { width: 206px; display: grid; grid-template-columns: repeat(6, 30px); gap: 2px; padding: 2px 8px 5px; }
+  .grid button { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; }
+  .grid button[data-preset="none"] { border-color: #f0f1f3; }
+  .grid button:not([data-preset="none"])::before { content: ''; width: 14px; height: 14px; background: var(--swatch); border-radius: 50%; }
+  .grid svg { width: 15px; height: 15px; }
+  .custom { height: 29px; border-top: 1px solid #41444b; display: flex; align-items: center; padding-top: 2px; }
+  .custom button { border: 0; background: none; font-size: 11px; }
+  .custom .use { display: flex; align-items: center; flex: 1; height: 25px; min-width: 0; gap: 6px; padding-left: 8px; white-space: nowrap; }
+  .custom .dot { display: block; flex: none; width: 12px; height: 12px; border-radius: 50%; background: #5a84d3; }
+  .custom .edit { flex: none; width: 30px; height: 25px; border-left: 1px solid #41444b; display: grid; place-items: center; }
+  .custom .edit svg { width: 15px; height: 15px; }
+  .explain { align-self: center; display: grid; gap: 17px; }
+  .explain h2 { margin: 0; font-size: 19px; font-weight: 620; line-height: 1.35; }
+  .explain p { margin: 0; font-size: 13px; line-height: 1.55; color: #c2cfdd; }
+  .detail { border-top: 1px solid #485568; padding-top: 13px; }
+  .detail strong { color: #deebf8; }
+  footer { border-top: 1px solid #303846; padding: 10px 26px; color: #b9c8da; font-size: 11px; }
+  @media (max-width: 600px) {
+    .frame { width: 360px; height: 740px; grid-template-rows: 68px 625px 47px; }
+    header { padding: 12px 16px; }
+    h1 { font-size: 18px; }
+    .canvas { padding: 14px 16px; grid-template-columns: 1fr; grid-template-rows: 415px 1fr; gap: 16px; }
+    .app { height: 415px; grid-template-columns: 132px 1fr; }
+    .sidebar { padding: 9px 5px; }
+    .brand { height: 30px; padding: 5px; font-size: 11px; white-space: nowrap; }
+    .brand small { display: none; }
+    .new { width: 100%; font-size: 11px; }
+    .nav { margin: 8px 0 4px; }
+    .nav svg { width: 13px; }
+    .tabs { margin: 4px 0 9px; }
+    .row { font-size: 11px; padding-right: 9px; }
+    .row-action { display: none; }
+    .tree-row { font-size: 11px; padding-left: 3px; }
+    .tree-row.sub { padding-left: 8px; }
+    .content { padding: 14px 10px; }
+    .content h2 { font-size: 14px; margin-top: 17px; }
+    .content p { font-size: 12px; }
+    .menu { left: 55px; top: 169px; transform: scale(1.25); }
+    .explain { align-self: start; gap: 7px; }
+    .explain h2 { font-size: 17px; }
+    .explain p { font-size: 12px; line-height: 1.45; }
+    .detail { padding-top: 8px; }
+    footer { padding: 9px 16px; font-size: 11px; line-height: 1.35; }
+  }
+</style>
+</head>
+<body>
+<main class="frame">
+  <header><div><h1>Fold · 活跃色标</h1><p>六个预设保持原位，自定义色单独复用</p></div><span class="version">v0.4.15</span></header>
+  <section class="canvas" aria-label="匿名合成界面菜单示意">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">DeepSeek Harness <small>合成界面</small></div>
+        <div class="new">新会话</div>
+        <div class="nav" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9H3z"/></svg><svg viewBox="0 0 24 24"><path d="M3 6h8l2 2h8v12H3z"/></svg><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8 12h8"/></svg></div>
+        <div class="divider"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></div>
+        <div class="tabs" aria-label="工作区 活动 收藏"><span><svg viewBox="0 0 24 24"><path d="M3 6.5h7l2 2H21v9.5H3z"/></svg></span><span class="active"><svg viewBox="0 0 24 24"><path d="M2 12h5l2-4 4 8 2-5 2 1h5"/></svg></span><span><svg viewBox="0 0 24 24"><g transform="rotate(-24 12 12)"><path d="M8.5 5.5h7l-1 4 2 3v1H7.5v-1l2-3-1-4Z"/><path d="M12 13.5v7"/></g></svg></span></div>
+        <div class="tree-title">活动 · 活跃会话</div>
+        <div class="tree-row">虚构项目 · 云杉</div>
+        <div class="row"><span class="stripe" data-row-stripe></span><strong>星桥计划 · 虚构会话</strong><small>虚构项目 · 云杉</small><span class="row-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></div>
+        <div class="tree-row sub">排期草图 · 虚构会话</div>
+      </aside>
+      <section class="content" aria-label="合成工作区"><p class="crumb">虚构项目 / 云杉</p><h2>星桥计划</h2><p>这是一组匿名合成会话。图中的菜单不是已登录 DSH 的截图。</p><p class="line">色标仅整理活跃列表的可见行。</p></section>
+      <div class="menu" data-menu role="menu" aria-label="Fold 活跃整理菜单">
+        <button type="button" role="menuitem">固定在顶部<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10M8 13V5m-3 3 3-3 3 3"/></svg></button>
+        <button type="button" role="menuitem">免打扰<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 11.2A6 6 0 0 1 4.8 3a6 6 0 1 0 8.2 8.2Z"/></svg></button>
+        <div class="colors"><span>色标</span><div class="grid" data-color-grid role="group" aria-label="活跃色标">
+          <button data-preset="none" type="button" aria-label="无色"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M3.8 12.2 12.2 3.8"/></svg></button>
+          <button data-preset="#72cada" type="button" aria-label="青蓝色标" style="--swatch:#72cada"></button>
+          <button data-preset="#80afff" type="button" aria-label="钴蓝色标" style="--swatch:#80afff"></button>
+          <button data-preset="#b09aff" type="button" aria-label="靛蓝色标" style="--swatch:#b09aff"></button>
+          <button data-preset="#cf9ceb" type="button" aria-label="雾紫色标" style="--swatch:#cf9ceb"></button>
+          <button data-preset="#b2bac8" type="button" aria-label="银灰色标" style="--swatch:#b2bac8"></button>
+        </div></div>
+        <div class="custom"><button class="use" data-custom-use type="button"><span class="dot" data-custom-dot></span>使用自定义颜色</button><button class="edit" data-custom-edit type="button" aria-label="编辑自定义颜色"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 11 8-8 2 2-8 8-3 1zM10 4l2 2"/></svg></button></div>
+      </div>
+    </div>
+    <aside class="explain"><h2>六色一排，照旧选择</h2><p>固定在顶部与免打扰仍是各自的操作；色标六格没有改名，也没有新增第七格。</p><p class="detail"><strong>已存自定义颜色</strong><br>点击色点复用到当前行；右侧铅笔独立编辑。颜色只写在本行，不回溯其他会话。</p></aside>
+  </section>
+  <footer>独立匿名合成 · 虚构项目与会话 · 非真实 DSH 录屏 · 未连接用户资料</footer>
+</main>
+</body>
+</html>
