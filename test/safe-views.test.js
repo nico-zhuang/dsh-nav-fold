@@ -1452,8 +1452,8 @@ test('A left stripe spans the compact row while Quiet stays actionable', () => {
   assert.match(quietMain, /color:/);
   const grid = source.match(/\.dsh-nav-fold-color-grid\s*\{([^}]*)\}/)?.[1] || '';
   const swatch = source.match(/\.dsh-nav-fold-color-swatch\s*\{([^}]*)\}/)?.[1] || '';
-  assert.match(grid, /display:\s*grid;[^}]*grid-template-columns:\s*repeat\(3,\s*32px\)/);
-  assert.match(swatch, /width:\s*32px;[^}]*height:\s*32px/);
+  assert.match(grid, /display:\s*grid;[^}]*grid-template-columns:\s*repeat\(6,\s*30px\)/, 'all six preset colors occupy one row');
+  assert.match(swatch, /width:\s*30px;[^}]*height:\s*30px/, 'compact swatches retain 30px click targets');
   assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
 });
 
@@ -2143,6 +2143,24 @@ async function withCustomColorView(nativeBuild, check, { activityPreferences = '
   }
 }
 
+for (const nativeBuild of ['rc5', 'rc1']) test(`compact Activity palette ${nativeBuild} follows one-row focus order without writing`, async () => {
+  await withCustomColorView(nativeBuild, async ({ app, host, open }) => {
+    await open('a');
+    const swatches = [...host.querySelectorAll('[data-activity-swatch]')];
+    const key = async (node, name) => React.act(async () => {
+      node.dispatchEvent(new app.dom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    });
+    swatches[5].focus(); await key(swatches[5], 'ArrowRight');
+    assert.ok(app.doc.activeElement === swatches[0], 'the sixth swatch wraps to the first on one row');
+    await key(swatches[0], 'ArrowDown');
+    assert.ok(app.doc.activeElement === host.querySelector('[data-activity-custom-open]'), 'Down goes to the custom color row');
+    swatches[0].focus(); await key(swatches[0], 'ArrowUp');
+    const quiet = [...host.querySelectorAll('[role="menuitem"]')].find(node => node.textContent.includes('免打扰'));
+    assert.ok(app.doc.activeElement === quiet, 'Up returns to the preceding Quiet menu item');
+    assert.equal(app.form.setCalls.length, 0, 'focus movement never writes Host preferences');
+  });
+});
+
 for (const nativeBuild of ['rc5', 'rc1']) test(`custom HEX picker ${nativeBuild} opens without writing, validates and cancels back to its own anchor`, async () => {
   await withCustomColorView(nativeBuild, async ({ app, host, anchor, open, change }) => {
     await open('a');
@@ -2195,9 +2213,15 @@ for (const nativeBuild of ['rc5', 'rc1']) test(`custom HEX ${nativeBuild} confir
     assert.equal(host.querySelector('[role="dialog"]'), null);
     assert.equal(app.doc.activeElement, anchor('a'));
     await open('b');
-    assert.ok(host.querySelector('[data-activity-custom-use]'));
-    assert.ok(host.querySelector('[data-activity-custom-edit]'));
-    await React.act(async () => { host.querySelector('[data-activity-custom-use]').click(); await flush(); });
+    const customUse = host.querySelector('[data-activity-custom-use]');
+    const customEdit = host.querySelector('[data-activity-custom-edit]');
+    assert.ok(customUse && customEdit);
+    assert.equal(customEdit.getAttribute('aria-label'), '编辑自定义颜色', 'icon-only Edit names its action');
+    assert.ok(customEdit.querySelector('svg path'), 'Edit is a visible pen icon rather than another text label');
+    assert.equal(customUse.parentElement, customEdit.parentElement, 'Use and Edit share one compact custom row');
+    customEdit.focus();
+    assert.equal(app.doc.activeElement, customEdit, 'Edit remains a separately focusable button');
+    await React.act(async () => { customUse.click(); await flush(); });
     saved = JSON.parse(app.form.getSnapshot().value.activityPreferences);
     assert.equal(saved.sessions.b.color, '#C68AE2', 'one-click saved custom color applies to another row');
     await open('b');
