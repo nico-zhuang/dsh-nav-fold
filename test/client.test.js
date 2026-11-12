@@ -10,14 +10,16 @@ import { createRoot } from 'react-dom/client';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.15 GitHub release declares shortcuts and required client modules', () => {
+test('v0.4.16 GitHub release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.15', 'publish the compact Activity menu under a distinct version from v0.4.14');
+  assert.equal(manifest.version, '0.4.16', 'publish the approved independent Activity rows and leading state dot after v0.4.15');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
   const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.15（正式版）$/);
-  assert.match(readme, /releases\/download\/v0\.4\.15\/dsh-nav-fold-0\.4\.15\.tgz/);
+  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.16（正式版）$/);
+  assert.match(readme, /releases\/download\/v0\.4\.16\/dsh-nav-fold-0\.4\.16\.tgz/);
+  assert.match(readme, /上一公开版.*v0\.4\.15/s);
+  assert.match(readme, /独立.*Quiet.*圆角.*2px.*绿点.*工作区/s);
   const activityNotes = readme.split('### 活跃列表专属整理（v0.4.13）')[1]?.split('\n### ')[0] || '';
   assert.doesNotMatch(activityNotes, /未发布|本机试用|当前公开 v0\.4\.12 Release 不包含/);
   assert.match(activityNotes, /固定在顶部/);

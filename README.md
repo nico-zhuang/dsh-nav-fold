@@ -1,18 +1,18 @@
-# dsh-nav-fold · v0.4.15（正式版）
+# dsh-nav-fold · v0.4.16（正式版）
 
 > 一条细线收起全局导航，把空间留给工作区与会话。工作区／活动／收藏按需开启；可配置快捷键先移动会话焦点，再整理或打开当前会话。macOS 还可独立隐藏顶部 Logo。
 
-下方五组画面可单独阅读，每组围绕一个功能主题，展示具体操作与结果。**画面是虚构资料的独立匿名合成示意，不是实际 DSH 录屏、真实插件 GUI 验收或遥控器实拍。** 正式功能与安装说明仍以本页文字和 [v0.4.15 发布说明](docs/releases/v0.4.15.md)为准。
+下方五组画面可单独阅读，每组围绕一个功能主题，展示具体操作与结果。**画面是虚构资料的独立匿名合成示意，不是实际 DSH 录屏、真实插件 GUI 验收或遥控器实拍。** 正式功能与安装说明仍以本页文字和 [v0.4.16 发布说明](docs/releases/v0.4.16.md)为准。
 
 ## 安装与升级
 
-**v0.4.15 安装：** 从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.15) 下载 `dsh-nav-fold-0.4.15.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
+**v0.4.16 安装：** 从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.16) 下载 `dsh-nav-fold-0.4.16.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
 
 ```sh
-dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.15/dsh-nav-fold-0.4.15.tgz
+dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.16/dsh-nav-fold-0.4.16.tgz
 ```
 
-已针对 **DSH 0.2.1-rc.5 与 0.2.2-rc.1** 两个已发布构建核对原生侧栏结构并做自动化回归；不代表 0.2.1 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.14](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.14) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
+已针对 **DSH 0.2.1-rc.5 与 0.2.2-rc.1** 两个已发布构建核对原生侧栏结构并做自动化回归；不代表 0.2.1 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.15](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.15) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
 
 ## 五步看懂 Fold
 
@@ -58,7 +58,9 @@ dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/rel
 
 先让「活动」中的会话主按钮获得键盘焦点，再通过**用户自行绑定**的整理快捷键打开**该行自己的**菜单；选择「固定在顶部」后，它进入独立顶部分组，钴蓝色标成为左侧 3px 细条。顶部固定不等于 DSH 原生置顶，也不会把会话加入收藏。rc.1 使用 Fold 独立整理入口、不点宿主三点；rc.5 使用 Fold 自有的兼容菜单。
 
-**v0.4.15 整理菜单：** 无色＋五个原有冷色色标现在六格横排，不新增色数。自定义颜色保存后，底行左侧可单独「使用自定义颜色」，右侧独立铅笔按钮才打开 HEX 编辑器；未保存自定义色时底行显示「自定义颜色…」。左右键在六色间环绕，上下键分别去免打扰／自定义入口，末色按 Tab 也能到自定义入口；编辑按钮另有可读名称。Quiet 活跃行保持单行标题与小月亮，相邻 Quiet 背景接成视觉组；其它 Tab 保留原两行会话标题。
+**v0.4.15 整理菜单：** 无色＋五个原有冷色色标现在六格横排，不新增色数。自定义颜色保存后，底行左侧可单独「使用自定义颜色」，右侧独立铅笔按钮才打开 HEX 编辑器；未保存自定义色时底行显示「自定义颜色…」。左右键在六色间环绕，上下键分别去免打扰／自定义入口，末色按 Tab 也能到自定义入口；编辑按钮另有可读名称。Quiet 活跃行保持单行标题与小月亮；v0.4.16 中相邻 Quiet 各有独立的柔和行底，而非旧版连成视觉组。其它 Tab 保留原两行会话标题。
+
+**v0.4.16 活跃行底：**相邻 Quiet 各自独立，6px 圆角、2px 行间距；普通会话保持两行，完成未读的绿点紧贴第二行工作区名称前方，而非悬在右侧。待处理／运行状态点也随工作区名称前置，空闲行没有状态点；运行中的呼吸效果、当前行高亮、左侧 3px 人工色条和右侧操作按钮互不混淆。收藏列表保留原状态点位置。这里只记录已实现交互，不将上方 v0.4.15 的离线合成画面冒称 v0.4.16 实机截图。
 
 **打开该行菜单：**
 
@@ -76,7 +78,7 @@ dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/rel
 
 <details><summary>另看聚焦起点与 Quiet 独立示例</summary>
 
-[聚焦但尚未打开菜单（v0.4.14 示意）](docs/images/readme-v0414/organize-before.webp) · [Quiet 的 v0.4.14 旧两行示意](docs/images/readme-v0414/organize-quiet.webp)（本版 Quiet 已改为单行与相邻底色拼接，旧图只保留历史对照；免打扰不停止任务，也不关闭通知或审批。）
+[聚焦但尚未打开菜单（v0.4.14 示意）](docs/images/readme-v0414/organize-before.webp) · [Quiet 的 v0.4.14 旧两行示意](docs/images/readme-v0414/organize-quiet.webp)（当前 Quiet 为独立单行底色，不再与相邻行拼接；旧图只保留历史对照。免打扰不停止任务，也不关闭通知或审批。）
 
 </details>
 
@@ -156,7 +158,7 @@ v0.4.12 仅将折叠导航细线和箭头的视觉内容上移 4px（CSS 像素�
 
 </details>
 
-> 上方 v0.4.1 旧动图与本节三张导航静态图在[匿名示意页](docs/preview.html)中运行当时的真实插件生成，指针由脚本驱动；其中的面板名称为虚构数据。上述 **v0.4.14 五步画面**与本版新换的 **v0.4.15 整理菜单画面**均由离线匿名合成界面制作；仅功能来源与图标／色值按源码核对，**不是运行真实插件或已登录 DSH 的截图**。实际 v0.4.15 菜单另在独立 QA profile 中完成深色／浅色可视与键盘验收，合成宣传图不充当验收证据。
+> 上方 v0.4.1 旧动图与本节三张导航静态图在[匿名示意页](docs/preview.html)中运行当时的真实插件生成，指针由脚本驱动；其中的面板名称为虚构数据。上述 **v0.4.14 五步画面**与 **v0.4.15 整理菜单画面**均由离线匿名合成界面制作；v0.4.16 未将它们改称新版本的实拍；仅功能来源与图标／色值按源码核对，**不是运行真实插件或已登录 DSH 的截图**。实际 v0.4.15 菜单另在独立 QA profile 中完成深色／浅色可视与键盘验收，合成宣传图不充当验收证据。
 
 ## v0.4.3 新增：工作区／活动／收藏（默认关闭）
 

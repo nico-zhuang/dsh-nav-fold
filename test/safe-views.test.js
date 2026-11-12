@@ -990,6 +990,28 @@ test('Activity shows native status dots only for explicit pending running and un
     assert.match(markup, /data-dsh-state-dot="done"/);
     assert.doesNotMatch(markup, /data-dsh-state-dot="error"/);
     assert.doesNotMatch(markup, />待处理<|>运行中<|>未读</);
+    const fragment = app.doc.createElement('div');
+    fragment.innerHTML = markup;
+    for (const id of ['wait', 'run', 'unread']) {
+      const subtitle = fragment.querySelector(`[data-dsh-nav-fold-session-id="${id}"] .dsh-nav-fold-session-subtitle`);
+      assert.ok(subtitle, `${id} keeps its workspace subtitle`);
+      assert.ok(subtitle.children[0]?.classList.contains('dsh-nav-fold-state-dot'), `${id} status leads the workspace name`);
+      assert.equal(subtitle.children[1]?.textContent, 'Demo', `${id} workspace follows its status`);
+    }
+    const idle = fragment.querySelector('[data-dsh-nav-fold-session-id="idle"] .dsh-nav-fold-session-subtitle');
+    assert.equal(idle?.children[0]?.textContent, 'Demo', 'idle workspace keeps its original left alignment');
+    assert.equal(idle?.querySelector('.dsh-nav-fold-state-dot'), null, 'idle does not invent a status');
+    assert.ok(fragment.querySelector('[data-dsh-nav-fold-session-id="unread"] .dsh-nav-fold-state-dot [data-dsh-state-dot="done"]'), 'completion semantics remain unchanged');
+    app.doc.querySelector('[data-view="favorites"]').click();
+    const favoritesMarkup = renderToStaticMarkup(React.createElement(View, {
+      useSessions: () => ({ phase: 'ready', ids: ['unread'], byId: { unread: { id: 'unread', title: 'Session unread' } } }),
+      useSessionStatus: () => statuses,
+      useWorkspaces: () => ({ items: [{ title: 'Demo', sessionIds: ['unread'] }], pinnedSessionIds: ['unread'] }),
+    }));
+    const favorites = app.doc.createElement('div'); favorites.innerHTML = favoritesMarkup;
+    const favoriteSubtitle = favorites.querySelector('[data-dsh-nav-fold-session-id="unread"] .dsh-nav-fold-session-subtitle');
+    assert.equal(favoriteSubtitle?.children[0]?.textContent, 'Demo', 'Favorites workspace remains first');
+    assert.ok(favoriteSubtitle?.children[1]?.classList.contains('dsh-nav-fold-state-dot'), 'Favorites status remains on the right');
   } finally { app.dispose(); }
 });
 
@@ -1240,7 +1262,7 @@ test('failed unpin leaves the favorite pressed and offers retry', async () => {
   }
 });
 
-test('native Activity places organization beside Host ellipsis in its positioned action strip while legacy retains three controls', async () => {
+test('native Activity reserves two actions beside its main button while legacy retains three controls', async () => {
   const app = mount({ active: true, nativeBuild: 'rc1', contextMenus: {
     open() {}, close() {}, active: { getSnapshot: () => null },
   } });
@@ -1257,12 +1279,13 @@ test('native Activity places organization beside Host ellipsis in its positioned
       ...props, useContextMenu: () => ({ getTriggerProps: () => ({}) }),
     })); });
     const row = host.querySelector('.dsh-nav-fold-session');
-    assert.equal(row.querySelectorAll('.dsh-nav-fold-session-actions button').length, 2, 'native Activity contains both independent actions in one positioned strip');
+    assert.equal(row.querySelectorAll('.dsh-nav-fold-session-actions button').length, 2, 'native Activity contains both independent actions in one reserved strip');
     assert.ok(row.querySelector('.dsh-nav-fold-session-actions [data-session-menu]'), 'Host ellipsis is retained');
     assert.ok(row.querySelector('.dsh-nav-fold-session-actions [data-activity-organize]'), 'Activity organizer anchors inside strip, not a flow-level Menu wrapper');
     assert.equal(row.lastElementChild.className, 'dsh-nav-fold-session-actions', 'Menu wrapper cannot expand the row flow');
     assert.match(row.className, /dsh-nav-fold-session-native/);
-    assert.match(source, /\.dsh-nav-fold-session-native\s+\.dsh-nav-fold-session-title\s*\{[^}]*padding-right:\s*(?:2[4-9]|3[0-2])px/);
+    assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session \.dsh-nav-fold-session-title,\s*\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session \.dsh-nav-fold-session-quiet-title-row\s*\{[^}]*padding-right:\s*0/,
+      'Activity titles use the grid action track instead of obsolete absolute-positioned right padding');
     assert.match(source, /\.dsh-nav-fold-session-actions\s+button\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/);
     await React.act(async () => { root.render(React.createElement(View, props)); });
     assert.equal(host.querySelectorAll('.dsh-nav-fold-session-actions button').length, 3);
@@ -1313,6 +1336,24 @@ async function withArchiveView(uiWorkspace, check, { favorites = false, url, act
     app.dispose();
   }
 }
+
+test('Activity A hidden action gutter opens its row without turning action clicks into navigation', async () => {
+  const calls = [];
+  await withArchiveView({ openSession: id => calls.push(id) }, async ({ host }) => {
+    const row = host.querySelector('[data-dsh-workspace-view="activity"] .dsh-nav-fold-session');
+    const main = row.querySelector('.dsh-nav-fold-session-main');
+    await React.act(async () => { row.click(); }); // Anonymous Chrome hit-test maps the hidden action gutter to this root.
+    assert.deepEqual(calls, ['a'], 'blank Activity gutter remains part of the open-session hit area');
+    await React.act(async () => { main.click(); });
+    assert.deepEqual(calls, ['a', 'a'], 'main click opens exactly once, never through a duplicate root handler');
+    await React.act(async () => { row.querySelector('[data-session-menu]').click(); });
+    assert.deepEqual(calls, ['a', 'a'], 'action clicks cannot bubble into opening the session');
+  });
+  await withArchiveView({ openSession: id => calls.push(id) }, async ({ host }) => {
+    await React.act(async () => { host.querySelector('.dsh-nav-fold-session').click(); });
+    assert.deepEqual(calls, ['a', 'a'], 'Favorites root does not gain a new click action');
+  }, { favorites: true });
+});
 
 const activeArchiveError = () => Object.assign(new Error('session busy'), { name: 'WorkspaceArchiveError', rpcError: { code: 'workspace/session-active' } });
 
@@ -1736,7 +1777,7 @@ test('Quiet running session keeps its Activity row, is muted and can be restored
   }
 });
 
-test('adjacent Quiet rows share straight inner edges while ordinary rows break the group', async () => {
+test('adjacent Quiet rows remain separate Activity surfaces without changing order', async () => {
   const prefs = JSON.stringify({ version: 1, sessions: { a: { quiet: true }, b: { quiet: true }, c: { quiet: true }, e: { quiet: true } } });
   const app = mount({ active: true, activityPreferences: prefs });
   try {
@@ -1756,15 +1797,31 @@ test('adjacent Quiet rows share straight inner edges while ordinary rows break t
     assert.ok(!rows[3].classList.contains('dsh-nav-fold-session-quiet') && rows[3].nextElementSibling === rows[4],
       'ordinary row splits the block before a single Quiet row');
   } finally { app.dispose(); }
-  const lower = source.match(/\.dsh-nav-fold-session-quiet:has\(\s*\+\s*\.dsh-nav-fold-session-quiet\s*\)\s*\{([^}]*)\}/)?.[1];
-  const upper = source.match(/\.dsh-nav-fold-session-quiet\s*\+\s*\.dsh-nav-fold-session-quiet\s*\{([^}]*)\}/)?.[1];
-  assert.ok(lower, 'a Quiet row adjoining the next one must lose its inner lower corners');
-  assert.ok(upper, 'a Quiet row adjoining the previous one must lose its inner upper corners');
-  for (const side of ['left', 'right']) {
-    assert.match(lower, new RegExp(`border-bottom-${side}-radius:\\s*0\\b`));
-    assert.match(upper, new RegExp(`border-top-${side}-radius:\\s*0\\b`));
-  }
-  assert.match(source, /\.dsh-nav-fold-session\s*\{[^}]*border-radius:\s*7px/, 'an isolated Quiet row keeps all four default rounded corners');
+  assert.doesNotMatch(source, /\.dsh-nav-fold-session-quiet:has\(\s*\+\s*\.dsh-nav-fold-session-quiet/, 'adjacent Quiet rows must not flatten their corners');
+  assert.doesNotMatch(source, /\.dsh-nav-fold-session-quiet\s*\+\s*\.dsh-nav-fold-session-quiet\s*\{/, 'each Quiet row retains its own shape');
+  const activityRow = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(activityRow, /border-radius:\s*6px/);
+  assert.match(activityRow, /margin-bottom:\s*2px/);
+  assert.match(activityRow, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
+  assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-quiet\s*\{[^}]*background:\s*color-mix/);
+  assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-selected\s*\{[^}]*background:\s*color-mix/);
+  assert.match(source, /@media\s*\(hover:\s*hover\)\s*\{[^}]*\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session:not\(\.dsh-nav-fold-session-selected\):hover/);
+});
+
+test('Activity A reserves distinct title, action, color-mark and keyboard-focus tracks', () => {
+  const activityMain = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main\s*\{([^}]*)\}/)?.[1] || '';
+  const activityActions = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-actions\s*\{([^}]*)\}/)?.[1] || '';
+  const focusRing = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main:focus-visible::after,\s*\[data-dsh-nav-fold-navigation\] \+ \.kB3qhq_regionArea \[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main:focus::after\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(activityMain, /min-height:\s*34px/);
+  assert.match(activityMain, /position:\s*relative/);
+  assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session:not\(\.dsh-nav-fold-session-quiet\) \.dsh-nav-fold-session-main\s*\{[^}]*min-height:\s*46px/);
+  assert.match(activityActions, /position:\s*static/);
+  assert.match(activityActions, /margin-right:\s*5px/);
+  assert.match(focusRing, /left:\s*8px/);
+  assert.match(focusRing, /right:\s*3px/);
+  assert.match(focusRing, /pointer-events:\s*none/);
+  assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main:active\s*\{\s*transform:\s*none/);
+  assert.match(source, /@media\s*\(hover:\s*none\)\s*\{\s*\.dsh-nav-fold-session-actions\s*\{[^}]*opacity:\s*1/);
 });
 
 test('Quiet menu action reports Host save rejection and rolls back the local preview', async () => {
