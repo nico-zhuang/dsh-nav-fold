@@ -1117,6 +1117,8 @@ test('rc5 Activity shortcut opens the focused row own legacy menu with Activity 
     assert.equal(result.status, 'handled', 'rc5 should use its own Activity menu, not a nonexistent rc1-only organizer');
     await React.act(async () => { result.run(); });
     assert.ok(host.querySelector('[role="menu"]')?.textContent.includes('固定在顶部'), 'legacy menu contains Activity organization actions');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.ok(host.querySelector('[role="menu"]')?.contains(doc.activeElement), 'organize shortcut places focus inside the opened menu');
     assert.deepEqual(opened, [], 'opening organization does not open the session');
     assert.equal(row.querySelector('[data-session-menu]').hasAttribute('data-activity-organize'), true, 'only Activity legacy anchor is eligible');
   } finally {
