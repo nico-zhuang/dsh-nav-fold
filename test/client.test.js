@@ -480,6 +480,7 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   assert.doesNotMatch(css, /overflow-x:\s*auto/);
   assert.match(css, /panelTitle/);
   assert.match(css, /panelGlyph/);
+  assert.match(css, /data-sidebar-nav-collapsed="true"\][^{]*\[class\*="panelUnpin"\]\s*\{[^}]*display:\s*none/, 'folded rows must hide the host unpin control that covers the 36px icon');
   assert.match(css, /data-sidebar-nav-collapsed/);
   toggle.click();
   assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
