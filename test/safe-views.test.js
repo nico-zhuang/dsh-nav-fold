@@ -10,6 +10,8 @@ import { createRoot } from 'react-dom/client';
 
 const source = fs.readFileSync(fileURLToPath(new URL('../lib/client.js', import.meta.url)), 'utf8');
 const html = `<div class="kB3qhq_root"><nav class="_3WPZCG_panelList" aria-label="Global panels"><button class="_3WPZCG_panelRow" aria-label="Plugins"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">Plugins</span></button></nav><div class="kB3qhq_regionArea" id="workspaces">Native workspace tree</div><div class="kB3qhq_footArea"></div></div>`;
+// Installed DSH 0.2.2-rc.2: nav + region share a scroll grid inside .kB3qhq_scrollRegion.
+const nestedHtml = `<div class="kB3qhq_root"><div class="kB3qhq_scrollRegion"><div class="kB3qhq_scrollArea" data-sidebar-scrollport=""><nav class="_3WPZCG_panelList" aria-label="Global panels"><button class="_3WPZCG_panelRow" aria-label="Plugins"><span class="_3WPZCG_panelGlyph">★</span><span class="_3WPZCG_panelTitle">Plugins</span></button></nav><div class="kB3qhq_regionArea" id="workspaces">Native workspace tree</div></div></div><div class="kB3qhq_footArea"></div></div>`;
 const native = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 'sidebar.workspaces' }, registrant: 'Gb', locale: 'workspace', children: { 'sidebar.workspaces.directoryFlow': { kind: 'list' }, 'sidebar.workspaces.session.menu.item': { kind: 'list' }, 'sidebar.workspaces.session.row.action': { kind: 'list' }, 'sidebar.session.row.leading': { kind: 'list' }, 'sidebar.session.row.hover': { kind: 'list' } } });
 // Installed DSH 0.2.2-rc.1: ui-workspace/lib/client.js:6050-6079; menu.item now belongs to contextMenu.content.
 const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 'sidebar.workspaces' }, registrant: 'tk', locale: 'workspace', children: {
@@ -21,8 +23,8 @@ const nativeRc1 = (rawScoped = false) => ({ options: rawScoped ? {} : { name: 's
 } });
 const flush = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
-function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false, url = 'http://localhost/', activityPreferences = '', legacyActivityPreferences, activityMigrationMarker } = {}) {
-  const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, { url });
+function mount({ savedOn = false, active = false, peers = [], status = 'ready', syncCallbacks = false, nativePresent = true, nativeBuild = 'rc5', nativeOverride = null, folded = false, nested = false, mode = 'workspace', uiWorkspace = {}, contextMenus, rawScoped = false, url = 'http://localhost/', activityPreferences = '', legacyActivityPreferences, activityMigrationMarker } = {}) {
+  const dom = new JSDOM(`<!doctype html><html><body>${nested ? nestedHtml : html}</body></html>`, { url });
   if (legacyActivityPreferences !== undefined) dom.window.localStorage.setItem('dsh-nav-fold:activity-preferences', legacyActivityPreferences);
   if (activityMigrationMarker !== undefined) dom.window.localStorage.setItem('dsh-nav-fold:activity-migration-completed', activityMigrationMarker);
   if (savedOn) dom.window.localStorage.setItem('dsh-nav-fold:workspace-tabs', 'on');
@@ -172,6 +174,49 @@ test('rc1 malformed or augmented native children and lone tk imposter remain qua
       assert.deepEqual(app.form.setCalls, [['workspaceViewsEnabled', false]]);
     } finally { app.dispose(); }
   }
+});
+
+test('unrecognized native registrant stamp with the shipped shape is accepted', async () => {
+  // 0.2.2-rc.2 renames the native stamp `tk` -> `WC`; shape is unchanged.
+  const wcNative = { ...nativeRc1(), registrant: 'WC' };
+  const app = mount({ active: true, nativeBuild: 'rc1', nativeOverride: wcNative });
+  try {
+    await flush();
+    assert.deepEqual([...app.doc.querySelectorAll('[data-dsh-workspace-tabs] button[data-view]')].map(node => node.dataset.view), ['workspace', 'activity', 'favorites']);
+    assert.deepEqual(app.form.setCalls, [], 'a recognized shape must not be saved off');
+    app.doc.querySelector('[data-view="activity"]').click();
+    await flush();
+    assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
+    assert.equal(app.form.getSnapshot().value.workspaceViewsEnabled, true);
+  } finally { app.dispose(); }
+});
+
+test('unrecognized registrant stamp still quarantines a shape that does not match', async () => {
+  const wcImposter = { ...nativeRc1(), registrant: 'WC', children: { ...nativeRc1().children, 'sidebar.session.row.hover': { kind: 'list', scope: 'root', inline: true } } };
+  const unnamed = { ...nativeRc1(), registrant: '' };
+  for (const nativeOverride of [wcImposter, unnamed]) {
+    const app = mount({ active: true, nativeBuild: 'rc1', nativeOverride });
+    try {
+      await flush();
+      assert.equal(app.doc.querySelector('[data-dsh-workspace-tabs]'), null);
+      assert.deepEqual(app.form.setCalls, [['workspaceViewsEnabled', false]]);
+    } finally { app.dispose(); }
+  }
+});
+
+test('scroll-grid host (0.2.2-rc.2) inserts the tabs row between nav and region', async () => {
+  const app = mount({ active: true, nativeBuild: 'rc1', nested: true });
+  try {
+    await flush();
+    const bar = app.doc.querySelector('[data-dsh-workspace-tabs-row]');
+    assert.ok(bar, 'tabs row must render when nav and region share a scroll grid');
+    assert.equal(bar.parentElement.className, 'kB3qhq_scrollArea');
+    assert.equal(bar.nextElementSibling.id, 'workspaces');
+    assert.deepEqual(app.form.setCalls, [], 'a wrapped host must not be quarantined');
+    app.doc.querySelector('[data-view="activity"]').click();
+    await flush();
+    assert.equal(app.entries.filter(entry => entry.registrant === 'dsh-nav-fold:workspace-views').length, 1);
+  } finally { app.dispose(); }
 });
 
 test('pre-existing competing occupant suspends and restores the saved workspace view', async () => {
