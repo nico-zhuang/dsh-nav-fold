@@ -10,14 +10,14 @@ import { createRoot } from 'react-dom/client';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.16 GitHub release declares shortcuts and required client modules', () => {
+test('v0.4.17 GitHub release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.16', 'publish the approved independent Activity rows and leading state dot after v0.4.15');
+  assert.equal(manifest.version, '0.4.17', 'publish the DSH 0.2.2-rc.2 sidebar compatibility fixes after v0.4.16');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
   const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.16（正式版）$/);
-  assert.match(readme, /releases\/download\/v0\.4\.16\/dsh-nav-fold-0\.4\.16\.tgz/);
+  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.17（正式版）$/);
+  assert.match(readme, /releases\/download\/v0\.4\.17\/dsh-nav-fold-0\.4\.17\.tgz/);
   assert.match(readme, /上一公开版.*v0\.4\.15/s);
   assert.match(readme, /独立.*Quiet.*圆角.*2px.*绿点.*工作区/s);
   const activityNotes = readme.split('### 活跃列表专属整理（v0.4.13）')[1]?.split('\n### ')[0] || '';
@@ -480,6 +480,7 @@ test('collapse is a keyboard-accessible icon strip scoped to global nav; workspa
   assert.doesNotMatch(css, /overflow-x:\s*auto/);
   assert.match(css, /panelTitle/);
   assert.match(css, /panelGlyph/);
+  assert.match(css, /data-sidebar-nav-collapsed="true"\][^{]*\[class\*="panelUnpin"\]\s*\{[^}]*display:\s*none/, 'folded rows must hide the host unpin control that covers the 36px icon');
   assert.match(css, /data-sidebar-nav-collapsed/);
   toggle.click();
   assert.equal(nav.dataset.sidebarNavCollapsed, 'false');
@@ -894,6 +895,7 @@ function shortcutFixture() {
   },
     get command() { return commands.get('dsh-nav-fold.session-navigation'); },
     get organize() { return commands.get('dsh-nav-fold.activity-organize'); },
+    get surface() { return commands.get('dsh-nav-fold.surface-mode'); },
     publish(next) { rows = next; for (const listener of listeners) listener(); },
     get released() { return released; }, get registrations() { return registrations; }, get releases() { return releases; },
     get listenerCount() { return listeners.size; } };
@@ -905,7 +907,13 @@ test('saved navigation switch releases active focus but keeps registered shortcu
     sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
   try {
     doc.querySelector('#workspaces').innerHTML = '<div role="treeitem" data-row-key="session:current" aria-selected="true">Current</div>';
-    assert.equal(shortcut.registrations, 2, 'both native commands register without changing saved settings');
+    assert.equal(shortcut.registrations, 3, 'native commands register without changing saved settings');
+    assert.equal(shortcut.surface.label(), 'Bot / 经典 Agent 模式切换 / Switch Bot / Classic Agent mode');
+    let surfaceEvents = 0;
+    doc.defaultView.addEventListener('dsh-nav-fold:toggle-surface', () => { surfaceEvents++; });
+    assert.equal(shortcut.surface.resolve({ region: 'page', modal: null }).status, 'handled');
+    shortcut.surface.resolve({ region: 'page', modal: null }).run();
+    assert.equal(surfaceEvents, 1, 'surface command bridges to DS Bot without importing private actions');
     assert.deepEqual(Object.keys(shortcut.command.defaults), [], 'no default key steals an existing binding');
     shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).run();
     assert.ok(doc.querySelector('[data-dsh-nav-fold-navigation]'));
@@ -916,7 +924,7 @@ test('saved navigation switch releases active focus but keeps registered shortcu
     assert.equal(shortcut.releases, 0);
     assert.ok(doc.querySelector('[data-dsh-workspace-tabs]'), 'three workspace views remain enabled');
     form.acceptNavigation(true);
-    assert.equal(shortcut.registrations, 2, 'commands keep a stable catalog identity across setting changes');
+    assert.equal(shortcut.registrations, 3, 'commands keep a stable catalog identity across setting changes');
     assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'handled');
     form.accept(false);
     assert.equal(shortcut.command.resolve({ region: 'page', modal: null, target: doc.body }).status, 'pass');
@@ -1090,7 +1098,7 @@ test('Activity organizer shortcut uses only the focused Activity session and its
     assert.equal(resolve(first).status, 'pass', 'a stale Activity focus cannot organize outside Activity view');
     assert.deepEqual(clicks, ['Organize A', 'Organize B']);
   } finally { fixture.dispose(); dispose(); }
-  assert.equal(shortcut.releases, 2, 'both commands are disposed with the plugin');
+  assert.equal(shortcut.releases, 3, 'all registered commands are disposed with the plugin');
 });
 
 test('rc5 Activity shortcut opens the focused row own legacy menu with Activity actions', async () => {
