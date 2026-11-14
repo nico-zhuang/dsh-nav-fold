@@ -349,6 +349,14 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.doesNotMatch(source, /activityKind !== target\.dataset\.activityKind/);
 });
 
+test('Activity supports modifier multi-select and grouped drag reorder', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /event\.metaKey \|\| event\.ctrlKey \|\| event\.shiftKey/);
+  assert.match(source, /selectedActivityIds/);
+  assert.match(source, /next\.splice\(at, 0, \.\.\.moving\)/);
+  assert.match(source, /onActivitySelect: selected === 'activity'/);
+});
+
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
   const source = fs.readFileSync(path, 'utf8');
   assert.match(source, /onActivityReorder: selected === 'activity' \? reorderActivity : undefined/);
