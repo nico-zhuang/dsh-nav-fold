@@ -420,9 +420,10 @@ test('Activity top pin is separate from Favorites and bypasses the recent cap', 
   } finally { dispose(); }
 });
 
-test('Activity Quiet icon uses rounded open crescent geometry', () => {
+test('Activity Quiet icon uses a rounded filled crescent geometry', () => {
   const source = fs.readFileSync(path, 'utf8');
-  assert.match(source, /M12\.7 11\.5A6 6 0 1 1 6\.4 3\.3/);
+  assert.match(source, /M12\.8 11\.2C10\.5 13\.3/);
+  assert.match(source, /fill: currentColor; stroke: currentColor/);
   assert.match(source, /stroke-linecap: round/);
 });
 
