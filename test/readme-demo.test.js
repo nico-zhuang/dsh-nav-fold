@@ -43,8 +43,8 @@ test('README presents five stand-alone synthetic scenes without losing release a
   assert.ok(organize.indexOf('organize-after.webp') < organize.indexOf('<details>'), 'organize menu/result must both be visible without expanding details');
   assert.match(intro, /docs\/images\/demo\.gif/);
   assert.match(intro, /releases\/download\/v0\.4\.1\/dsh-nav-fold-demo\.mp4/);
-  assert.match(readme, /releases\/download\/v0\.4\.19\/dsh-nav-fold-0\.4\.19\.tgz/);
-  assert.match(readme, /上一公开版.*v0\.4\.18/s);
+  assert.match(readme, /releases\/download\/v0\.4\.20\/dsh-nav-fold-0\.4\.20\.tgz/);
+  assert.match(readme, /上一公开版.*v0\.4\.19/s);
   assert.doesNotMatch(intro, /(?:默认|预设).{0,6}(?:快捷键|键位).{0,3}(?:已绑定|已设置)/);
 });
 

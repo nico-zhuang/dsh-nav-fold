@@ -1,18 +1,18 @@
-# dsh-nav-fold · v0.4.19（正式版）
+# dsh-nav-fold · v0.4.20（正式版）
 
 > 一条细线收起全局导航，把空间留给工作区与会话。工作区／活动／收藏按需开启；可配置快捷键先移动会话焦点，再整理或打开当前会话。macOS 还可独立隐藏顶部 Logo。
 
-下方五组画面可单独阅读，每组围绕一个功能主题，展示具体操作与结果。**画面是虚构资料的独立匿名合成示意，不是实际 DSH 录屏、真实插件 GUI 验收或遥控器实拍。** 正式功能与安装说明仍以本页文字和 [v0.4.19 发布说明](docs/releases/v0.4.19.md)为准。
+下方五组画面可单独阅读，每组围绕一个功能主题，展示具体操作与结果。**画面是虚构资料的独立匿名合成示意，不是实际 DSH 录屏、真实插件 GUI 验收或遥控器实拍。** 正式功能与安装说明仍以本页文字和 [v0.4.20 发布说明](docs/releases/v0.4.20.md)为准。
 
 ## 安装与升级
 
-**v0.4.19 安装：** 从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.19) 下载 `dsh-nav-fold-0.4.19.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
+**v0.4.20 安装：** 从 [GitHub Release](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.20) 下载 `dsh-nav-fold-0.4.20.tgz`，或通过 DSH CLI 安装（`desktop` 换成你的 profile 名）：
 
 ```sh
-dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.19/dsh-nav-fold-0.4.19.tgz
+dsh plugin --profile desktop add https://github.com/nico-zhuang/dsh-nav-fold/releases/download/v0.4.20/dsh-nav-fold-0.4.20.tgz
 ```
 
-已针对 **DSH 0.2.1-rc.5、0.2.2-rc.1 与 0.2.2-rc.2** 三个已发布构建核对原生侧栏结构并做自动化回归；不代表 0.2.1 或 0.2.2 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.18](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.18) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
+已针对 **DSH 0.2.1-rc.5、0.2.2-rc.1 与 0.2.2-rc.2** 三个已发布构建核对原生侧栏结构并做自动化回归；不代表 0.2.1 或 0.2.2 的所有子版本均已验证。升级后正常重启 DSH；三栏依旧**默认关闭**，若旧版安全隔离曾将其保存为关闭，需在插件配置中重新保存开启。上一公开版 [v0.4.19](https://github.com/nico-zhuang/dsh-nav-fold/releases/tag/v0.4.19) 保留下载与重装回退入口；这仍是 GitHub Release `.tgz` 发布，不是 npm 包发布。
 
 ## 五步看懂 Fold
 
