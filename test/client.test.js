@@ -349,6 +349,12 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.doesNotMatch(source, /activityKind !== target\.dataset\.activityKind/);
 });
 
+test('Activity row background transitions are CSS-only and low-cost', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /transition: background-color 220ms cubic-bezier/);
+  assert.doesNotMatch(source, /requestAnimationFrame.*background/);
+});
+
 test('Activity supports modifier multi-select and grouped drag reorder', () => {
   const source = fs.readFileSync(path, 'utf8');
   assert.match(source, /event\.metaKey \|\| event\.ctrlKey \|\| event\.shiftKey/);
