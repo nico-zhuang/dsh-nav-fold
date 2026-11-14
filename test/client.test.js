@@ -10,15 +10,15 @@ import { createRoot } from 'react-dom/client';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.18 GitHub release declares shortcuts and required client modules', () => {
+test('v0.4.19 GitHub release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.18', 'publish the focus and surface shortcut fixes after v0.4.17');
+  assert.equal(manifest.version, '0.4.19', 'publish Activity drag sorting after v0.4.18');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
   const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.18（正式版）$/);
-  assert.match(readme, /releases\/download\/v0\.4\.18\/dsh-nav-fold-0\.4\.18\.tgz/);
-  assert.match(readme, /上一公开版.*v0\.4\.17/s);
+  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.19（正式版）$/);
+  assert.match(readme, /releases\/download\/v0\.4\.19\/dsh-nav-fold-0\.4\.19\.tgz/);
+  assert.match(readme, /上一公开版.*v0\.4\.18/s);
   assert.match(readme, /独立.*Quiet.*圆角.*2px.*绿点.*工作区/s);
   const activityNotes = readme.split('### 活跃列表专属整理（v0.4.13）')[1]?.split('\n### ')[0] || '';
   assert.doesNotMatch(activityNotes, /未发布|本机试用|当前公开 v0\.4\.12 Release 不包含/);
@@ -328,6 +328,29 @@ test('Activity saved preferences reject unknown fields, unsafe colors and malfor
     } }));
     assert.deepEqual(JSON.parse(JSON.stringify(result)), { a: { top: true, quiet: true, color: 'blue' } });
     assert.deepEqual(JSON.parse(JSON.stringify(parse(JSON.stringify({ version: 999, sessions: { a: { top: true } } })))), {});
+  } finally { dispose(); }
+});
+
+test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /onActivityReorder: selected === 'activity' \? reorderActivity : undefined/);
+  assert.match(source, /data-activity-top-dropzone/);
+  assert.match(source, /event\.clientY > event\.currentTarget\.getBoundingClientRect\(\)\.top/);
+  assert.match(source, /onDrop: selected === 'activity'/);
+});
+
+test('Activity order preferences parse safely and sort only within status and top groups', () => {
+  const { client, dispose } = start();
+  try {
+    const parse = client.__test__.parseActivityPreferences;
+    const parsed = parse(JSON.stringify({ version: 1, sessions: {
+      first: { order: 2 }, second: { order: 0 }, urgent: { order: 9 }, top: { top: true, order: 1 },
+    } }));
+    assert.deepEqual(JSON.parse(JSON.stringify(parsed)), { first: { order: 2 }, second: { order: 0 }, urgent: { order: 9 }, top: { top: true, order: 1 } });
+    const ids = ['first', 'second', 'urgent', 'top'];
+    const byId = Object.fromEntries(ids.map((id, index) => [id, { id, updatedAt: 10 - index }]));
+    const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map([['urgent', { pendingInteraction: { kind: 'approval' } }]]), {}, new Set(), 20, parsed);
+    assert.deepEqual(result.activity.map(row => row.id), ['top', 'urgent', 'second', 'first']);
   } finally { dispose(); }
 });
 
