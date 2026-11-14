@@ -340,6 +340,8 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.match(source, /data-activity-drop-target/);
   assert.match(source, /item\.style\.transform = `translateY/);
   assert.match(source, /transition: transform 160ms/);
+  assert.match(source, /data-activity-kind/);
+  assert.match(source, /source\.dataset\.activityKind !== target\.dataset\.activityKind/);
 });
 
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
