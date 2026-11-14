@@ -338,6 +338,8 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.match(source, /replaceActivityPreferences\(replacement\)/);
   assert.match(source, /data-activity-dragging/);
   assert.match(source, /data-activity-drop-target/);
+  assert.match(source, /item\.style\.transform = `translateY/);
+  assert.match(source, /transition: transform 160ms/);
 });
 
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
