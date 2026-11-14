@@ -331,6 +331,15 @@ test('Activity saved preferences reject unknown fields, unsafe colors and malfor
   } finally { dispose(); }
 });
 
+test('Activity reorder uses one replace write and visible drag feedback', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /const replaceActivityPreferences = \(next, resolve\)/);
+  assert.match(source, /pendingRef\.current\.push\(\{ replace: next, reorder: true/);
+  assert.match(source, /replaceActivityPreferences\(replacement\)/);
+  assert.match(source, /data-activity-dragging/);
+  assert.match(source, /data-activity-drop-target/);
+});
+
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
   const source = fs.readFileSync(path, 'utf8');
   assert.match(source, /onActivityReorder: selected === 'activity' \? reorderActivity : undefined/);
