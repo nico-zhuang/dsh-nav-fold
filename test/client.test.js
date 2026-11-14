@@ -420,6 +420,12 @@ test('Activity top pin is separate from Favorites and bypasses the recent cap', 
   } finally { dispose(); }
 });
 
+test('Activity Quiet icon uses rounded open crescent geometry', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /M12\.7 11\.5A6 6 0 1 1 6\.4 3\.3/);
+  assert.match(source, /stroke-linecap: round/);
+});
+
 test('Activity Quiet keeps real running rank and unchanged recent cap without falsifying Host status', () => {
   const { client, dispose } = start();
   try {
