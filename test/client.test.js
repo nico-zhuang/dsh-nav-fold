@@ -340,6 +340,7 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.match(source, /data-activity-drop-position/);
   assert.match(source, /data-activity-drop-position/);
   assert.match(source, /data-activity-drop-position="after"/);
+  assert.match(source, /data-activity-dragging=\"true\"\] \{ opacity: 0; pointer-events: none; \}/);
   assert.match(source, /item\.style\.transform = `translateY/);
   assert.match(source, /transition: transform 160ms/);
   assert.match(source, /data-activity-kind/);
