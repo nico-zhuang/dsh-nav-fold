@@ -342,7 +342,8 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.match(source, /data-activity-drop-position="after"/);
   assert.match(source, /data-activity-dragging=\"true\"\] \{ opacity: 1; background:/);
   assert.match(source, /data-activity-dragging=\"true\"\] > \* \{ visibility: hidden; \}/);
-  assert.doesNotMatch(source, /item\.style\.transform = `translateY/);
+  assert.match(source, /const animateActivityReorder/);
+  assert.match(source, /transition = 'transform 220ms/);
   assert.match(source, /data-activity-kind/);
   assert.match(source, /source\.dataset\.activityKind !== target\.dataset\.activityKind/);
 });
