@@ -345,7 +345,8 @@ test('Activity reorder uses one replace write and visible drag feedback', () => 
   assert.match(source, /const animateActivityReorder/);
   assert.match(source, /transition = 'transform 220ms/);
   assert.match(source, /data-activity-kind/);
-  assert.match(source, /source\.dataset\.activityKind !== target\.dataset\.activityKind/);
+  assert.match(source, /rows\.filter\(\(row\) => Boolean\(row\.top\) === top\)/);
+  assert.doesNotMatch(source, /activityKind !== target\.dataset\.activityKind/);
 });
 
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
@@ -356,7 +357,7 @@ test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
   assert.match(source, /onDrop: selected === 'activity'/);
 });
 
-test('Activity order preferences parse safely and sort only within status and top groups', () => {
+test('Activity order preferences parse safely and sort across non-top status groups', () => {
   const { client, dispose } = start();
   try {
     const parse = client.__test__.parseActivityPreferences;
@@ -367,7 +368,7 @@ test('Activity order preferences parse safely and sort only within status and to
     const ids = ['first', 'second', 'urgent', 'top'];
     const byId = Object.fromEntries(ids.map((id, index) => [id, { id, updatedAt: 10 - index }]));
     const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map([['urgent', { pendingInteraction: { kind: 'approval' } }]]), {}, new Set(), 20, parsed);
-    assert.deepEqual(result.activity.map(row => row.id), ['top', 'urgent', 'second', 'first']);
+    assert.deepEqual(result.activity.map(row => row.id), ['top', 'second', 'first', 'urgent']);
   } finally { dispose(); }
 });
 
