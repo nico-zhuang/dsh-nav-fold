@@ -144,7 +144,7 @@ test('saved brand setting owns the generic logo-row style independently of works
     await form.set('hideBrandEnabled', true);
     assert.equal(doc.querySelectorAll('style[data-plugin="dsh-nav-fold"][data-plugin-css="dsh-nav-fold/hide-brand"]').length, 1, 'repeated on never duplicates Fold-owned style');
     assert.match(ownedStyle()?.textContent || '', /display:\s*none\s*!important/);
-    assert.equal(ownedStyle().textContent, '[class*="logoRow"] > [class*="brand"]{display:none!important}');
+    assert.equal(ownedStyle().textContent, '[class*="logoRow"] > [class*="brand"]{display:none!important}[class*="logoRow"]:has(> [class*="brand"]){justify-content:flex-start!important}');
     assert.equal(doc.querySelectorAll(selector).length, 1, 'the brand child is the only matching target');
     assert.equal(doc.querySelectorAll('[data-sidebar-toggle]').length, 1, 'the sidebar toggle remains outside the hidden brand child');
     form.setStatus('loading');
