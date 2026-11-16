@@ -130,13 +130,13 @@ test('old localStorage opt-in is ignored; accepted setting mounts after DSH crea
 test('saved brand setting owns the generic logo-row style independently of workspace views and restores on dispose', async () => {
   const { slots } = slotFixture();
   const form = settingsForm(false);
-  const html = `${workspaceSidebar().replace('<nav', '<div class="kB3qhq_logoRow">Brand</div><nav')}`;
+  const html = `${workspaceSidebar().replace('<nav', '<div class="kB3qhq_logoRow"><button class="kB3qhq_brand">Brand</button><button data-sidebar-toggle="true" class="kB3qhq_toggle">Toggle</button></div><nav')}`;
   const { doc, dom, dispose } = start(html, undefined, undefined, () => ({ slots, sessions: {}, uiWorkspace: {}, configForms: configForms(form) }));
   const ownedStyle = () => doc.querySelector('style[data-plugin="dsh-nav-fold"][data-plugin-css="dsh-nav-fold/hide-brand"]');
   const foreignStyle = doc.createElement('style'); foreignStyle.dataset.pluginCss = 'dsh-hide-brand/logo-row'; doc.head.append(foreignStyle);
   const collidingStyle = doc.createElement('style'); collidingStyle.dataset.pluginCss = 'dsh-nav-fold/hide-brand';
   collidingStyle.dataset.plugin = 'another-context'; doc.head.append(collidingStyle);
-  const selector = '[class*="logoRow"]';
+  const selector = '[class*="logoRow"] > [class*="brand"]';
   try {
     assert.equal(ownedStyle(), null, 'default-off setting leaves the native brand visible');
     assert.equal(doc.querySelector('[data-dsh-workspace-tabs]'), null, 'workspace views remain independently disabled');
@@ -144,8 +144,9 @@ test('saved brand setting owns the generic logo-row style independently of works
     await form.set('hideBrandEnabled', true);
     assert.equal(doc.querySelectorAll('style[data-plugin="dsh-nav-fold"][data-plugin-css="dsh-nav-fold/hide-brand"]').length, 1, 'repeated on never duplicates Fold-owned style');
     assert.match(ownedStyle()?.textContent || '', /display:\s*none\s*!important/);
-    assert.equal(ownedStyle().textContent, '[class*="logoRow"]{display:none!important}');
-    assert.equal(doc.querySelectorAll(selector).length, 1, 'the brand row is the only matching target');
+    assert.equal(ownedStyle().textContent, '[class*="logoRow"] > [class*="brand"]{display:none!important}');
+    assert.equal(doc.querySelectorAll(selector).length, 1, 'the brand child is the only matching target');
+    assert.equal(doc.querySelectorAll('[data-sidebar-toggle]').length, 1, 'the sidebar toggle remains outside the hidden brand child');
     form.setStatus('loading');
     assert.equal(ownedStyle(), null, 'unready configuration fails open to native branding');
     form.setStatus('ready');
