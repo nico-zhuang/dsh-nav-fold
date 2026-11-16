@@ -386,6 +386,17 @@ test('Activity order preferences parse safely and sort across non-top status gro
   } finally { dispose(); }
 });
 
+test('new Activity sessions keep default status order after manual sorting', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = ['manual', 'newer'];
+    const byId = { manual: { id: 'manual', updatedAt: 1 }, newer: { id: 'newer', updatedAt: 9 } };
+    const prefs = { version: 1, sessions: { manual: { order: 0 } } };
+    const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), {}, new Set(), 20, client.__test__.parseActivityPreferences(JSON.stringify(prefs)));
+    assert.deepEqual(result.activity.map(row => row.id), ['newer', 'manual']);
+  } finally { dispose(); }
+});
+
 test('Activity HEX parser accepts strict six-digit values and rejects unsafe custom data', () => {
   const { client, dispose } = start();
   try {
