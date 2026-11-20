@@ -10,14 +10,14 @@ import { createRoot } from 'react-dom/client';
 
 const path = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 
-test('v0.4.22 GitHub release declares shortcuts and required client modules', () => {
+test('v0.4.23 GitHub release declares shortcuts and required client modules', () => {
   const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
   assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-workspace', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-shortcuts']); assert.deepEqual(manifest.dsh.client.inject, [...new Set(manifest.dsh.client.inject)], 'all required client modules are declared once');
-  assert.equal(manifest.version, '0.4.22', 'publish Web sidebar compatibility and Activity drag sorting');
+  assert.equal(manifest.version, '0.4.23', 'publish Web sidebar compatibility and Activity drag sorting');
   assert.ok(manifest.files.includes('THIRD_PARTY_NOTICES.md'), 'release tarball carries the upstream MIT notice');
   const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
-  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.22（正式版）$/);
-  assert.match(readme, /releases\/download\/v0\.4\.22\/dsh-nav-fold-0\.4\.22\.tgz/);
+  assert.match(readme.split('\n')[0], /^# dsh-nav-fold · v0\.4\.23（正式版）$/);
+  assert.match(readme, /releases\/download\/v0\.4\.23\/dsh-nav-fold-0\.4\.23\.tgz/);
   assert.match(readme, /上一公开版.*v0\.4\.21/s);
   assert.match(readme, /独立.*Quiet.*圆角.*2px.*绿点.*工作区/s);
   const activityNotes = readme.split('### 活跃列表专属整理（v0.4.13）')[1]?.split('\n### ')[0] || '';
@@ -394,6 +394,28 @@ test('Activity order preferences parse safely while live status outranks manual 
     const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map([['urgent', { pendingInteraction: { kind: 'approval' } }]]), {}, new Set(), 20, parsed);
     assert.deepEqual(result.activity.map(row => row.id), ['top', 'urgent', 'second', 'first']);
   } finally { dispose(); }
+});
+
+test('Activity completion sort orders completed sessions newest first and missing times last', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = ['missing', 'old', 'new'];
+    const byId = {
+      missing: { id: 'missing', updatedAt: 999 },
+      old: { id: 'old', completedAt: 100 },
+      new: { id: 'new', completedAt: 200 },
+    };
+    const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), {}, new Set(), 20, {}, null, new Set(), 'completion');
+    assert.deepEqual(result.activity.map(row => row.id), ['new', 'old', 'missing']);
+  } finally { dispose(); }
+});
+
+test('Activity completion sort exposes triple-click trigger and transient notice', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /activityTabClickCount === 3/);
+  assert.match(source, /dsh-nav-fold:activity-completion-sort/);
+  assert.match(source, /Sorted by completion time/);
+  assert.match(source, /dsh-nav-fold-activity-sort-note/);
 });
 
 test('Activity consumes manual order after a session becomes active and then recent', () => {
