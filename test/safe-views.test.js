@@ -1858,7 +1858,7 @@ test('Activity A reserves distinct title, action, color-mark and keyboard-focus 
   const activityActions = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-actions\s*\{([^}]*)\}/)?.[1] || '';
   const focusRing = source.match(/\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main:focus-visible::after,\s*\[data-dsh-nav-fold-navigation\] \+ \.kB3qhq_regionArea \[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session-main:focus::after\s*\{([^}]*)\}/)?.[1] || '';
   assert.match(activityMain, /min-height:\s*34px/);
-  assert.match(activityMain, /position:\s*relative/);
+  assert.match(activityMain, /position:\s*static/);
   assert.match(source, /\[data-dsh-workspace-view="activity"\] \.dsh-nav-fold-session:not\(\.dsh-nav-fold-session-quiet\) \.dsh-nav-fold-session-main\s*\{[^}]*min-height:\s*46px/);
   assert.match(activityActions, /position:\s*static/);
   assert.match(activityActions, /margin-right:\s*5px/);
