@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "折叠导航",
+    "description": "为 DSH 提供紧凑侧栏、工作区视图、活跃整理、焦点导航和可选的 macOS 顶部 Logo 隐藏。",
+    "detail": "docs/DETAIL.md"
+  }
+}
