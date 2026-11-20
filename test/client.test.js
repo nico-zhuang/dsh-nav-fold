@@ -362,6 +362,15 @@ test('Activity supports modifier multi-select and grouped drag reorder', () => {
   assert.match(source, /onActivitySelect: selected === 'activity'/);
 });
 
+test('Activity exposes relative timestamps that hand off smoothly to row actions', () => {
+  const source = fs.readFileSync(path, 'utf8');
+  assert.match(source, /formatActivityTime\(row\.updatedAt, english\)/);
+  assert.match(source, /dsh-nav-fold-session-time/);
+  assert.match(source, /session:hover \.dsh-nav-fold-session-time/);
+  assert.match(source, /transition: opacity 150ms ease, transform 220ms cubic-bezier/);
+  assert.match(source, /prefers-reduced-motion: reduce[^}]*dsh-nav-fold-session-time/s);
+});
+
 test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
   const source = fs.readFileSync(path, 'utf8');
   assert.match(source, /onActivityReorder: selected === 'activity' \? reorderActivity : undefined/);
@@ -370,7 +379,7 @@ test('Activity rows expose drag/drop wiring and an empty top drop zone', () => {
   assert.match(source, /onDrop: selected === 'activity'/);
 });
 
-test('Activity order preferences parse safely and sort across non-top status groups', () => {
+test('Activity order preferences parse safely while live status outranks manual order', () => {
   const { client, dispose } = start();
   try {
     const parse = client.__test__.parseActivityPreferences;
@@ -381,7 +390,27 @@ test('Activity order preferences parse safely and sort across non-top status gro
     const ids = ['first', 'second', 'urgent', 'top'];
     const byId = Object.fromEntries(ids.map((id, index) => [id, { id, updatedAt: 10 - index }]));
     const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map([['urgent', { pendingInteraction: { kind: 'approval' } }]]), {}, new Set(), 20, parsed);
-    assert.deepEqual(result.activity.map(row => row.id), ['top', 'second', 'first', 'urgent']);
+    assert.deepEqual(result.activity.map(row => row.id), ['top', 'urgent', 'second', 'first']);
+  } finally { dispose(); }
+});
+
+test('Activity consumes manual order after a session becomes active and then recent', () => {
+  const { client, dispose } = start();
+  try {
+    const ids = ['manual', 'newer', 'active'];
+    const byId = {
+      manual: { id: 'manual', updatedAt: 10 },
+      newer: { id: 'newer', updatedAt: 30 },
+      active: { id: 'active', updatedAt: 20 },
+    };
+    const prefs = client.__test__.parseActivityPreferences(JSON.stringify({ version: 1, sessions: {
+      manual: { order: 0 }, active: { order: 1 }, newer: { order: 2 },
+    } }));
+    const consumed = new Set(['active']);
+    const running = client.__test__.selectWorkspaceViews({ ids, byId }, new Map([['active', { running: true }]]), {}, new Set(), 20, prefs, null, consumed);
+    assert.equal(running.activity[0].id, 'active', 'running status outranks old manual position');
+    const recent = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), {}, new Set(), 20, prefs, null, consumed);
+    assert.deepEqual(recent.activity.map(row => row.id), ['newer', 'active', 'manual'], 'consumed order falls back to natural recent order');
   } finally { dispose(); }
 });
 
