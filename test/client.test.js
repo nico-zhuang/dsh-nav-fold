@@ -417,6 +417,8 @@ test('Activity completion sort exposes triple-click trigger and transient notice
   assert.match(source, /dsh-nav-fold:activity-completion-sort/);
   assert.match(source, /Sorted by last update/);
   assert.match(source, /dsh-nav-fold-activity-sort-note/);
+  assert.match(source, /More settings…/);
+  assert.match(source, /dsh-nav-fold-context-menu/);
   assert.match(source, /Manual dragging exits the transient triple-click sort/);
   assert.match(source, /setActivitySortMode\('default'\)/);
 });
