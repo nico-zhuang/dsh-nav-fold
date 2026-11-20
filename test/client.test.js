@@ -396,14 +396,14 @@ test('Activity order preferences parse safely while live status outranks manual 
   } finally { dispose(); }
 });
 
-test('Activity completion sort orders completed sessions newest first and missing times last', () => {
+test('Activity completion sort orders sessions by last update and missing times last', () => {
   const { client, dispose } = start();
   try {
     const ids = ['missing', 'old', 'new'];
     const byId = {
-      missing: { id: 'missing', updatedAt: 999 },
-      old: { id: 'old', completedAt: 100 },
-      new: { id: 'new', completedAt: 200 },
+      missing: { id: 'missing' },
+      old: { id: 'old', updatedAt: 100 },
+      new: { id: 'new', updatedAt: 200 },
     };
     const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), {}, new Set(), 20, {}, null, new Set(), 'completion');
     assert.deepEqual(result.activity.map(row => row.id), ['new', 'old', 'missing']);
@@ -415,7 +415,7 @@ test('Activity completion sort exposes triple-click trigger and transient notice
   const source = fs.readFileSync(path, 'utf8');
   assert.match(source, /activityTabClickCount === 3/);
   assert.match(source, /dsh-nav-fold:activity-completion-sort/);
-  assert.match(source, /Sorted by completion time/);
+  assert.match(source, /Sorted by last update/);
   assert.match(source, /dsh-nav-fold-activity-sort-note/);
 });
 
