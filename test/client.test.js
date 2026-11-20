@@ -367,6 +367,7 @@ test('Activity exposes relative timestamps that hand off smoothly to row actions
   assert.match(source, /formatActivityTime\(row\.updatedAt, english\)/);
   assert.match(source, /dsh-nav-fold-session-time/);
   assert.match(source, /session:hover \.dsh-nav-fold-session-time/);
+  assert.match(source, /position: absolute; right: 8px; bottom: 7px/);
   assert.match(source, /transition: opacity 150ms ease, transform 220ms cubic-bezier/);
   assert.match(source, /prefers-reduced-motion: reduce[^}]*dsh-nav-fold-session-time/s);
 });
