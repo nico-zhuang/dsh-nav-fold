@@ -407,6 +407,7 @@ test('Activity completion sort orders completed sessions newest first and missin
     };
     const result = client.__test__.selectWorkspaceViews({ ids, byId }, new Map(), {}, new Set(), 20, {}, null, new Set(), 'completion');
     assert.deepEqual(result.activity.map(row => row.id), ['new', 'old', 'missing']);
+    assert.equal(result.activity.length, 3, 'completion sort bypasses the recent-session cap');
   } finally { dispose(); }
 });
 
