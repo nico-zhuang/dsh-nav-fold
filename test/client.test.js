@@ -63,7 +63,7 @@ function slotFixture() {
   const slots = {
     inject: (_name, fn) => { const cleanup = fn(); if (typeof cleanup === 'function') injected.push(cleanup); return cleanup; },
     register(spec, component) {
-      assert.ok(['sidebar.workspaces', 'plugins.bundle.config', 'settings.plugins.tab'].includes(spec.name));
+      assert.ok(['sidebar.workspaces', 'plugins.bundle.config', 'settings.plugins.tab', 'shell.overlay'].includes(spec.name));
       entries.set(spec.name, { spec, component }); notify(spec.name);
       return () => { if (entries.get(spec.name)?.component === component) { entries.delete(spec.name); notify(spec.name); } };
     },
@@ -418,6 +418,8 @@ test('Activity completion sort exposes triple-click trigger and transient notice
   assert.match(source, /Sorted by last update/);
   assert.match(source, /dsh-nav-fold-activity-sort-note/);
   assert.match(source, /More settings…/);
+  assert.match(source, /dsh-nav-fold-settings-overlay/);
+  assert.match(source, /dsh-nav-fold:open-settings/);
   assert.match(source, /dsh-nav-fold-context-menu/);
   assert.match(source, /Manual dragging exits the transient triple-click sort/);
   assert.match(source, /setActivitySortMode\('default'\)/);

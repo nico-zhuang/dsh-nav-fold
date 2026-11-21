@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Fold navigation",
+    "title": "dsh-nav-fold · Fold navigation",
     "description": "A compact DSH sidebar with workspace views, Activity organization, focus navigation, and optional macOS logo hiding.",
     "detail": "docs/DETAIL.md"
   }
