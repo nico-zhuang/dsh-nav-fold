@@ -63,7 +63,7 @@ function slotFixture() {
   const slots = {
     inject: (_name, fn) => { const cleanup = fn(); if (typeof cleanup === 'function') injected.push(cleanup); return cleanup; },
     register(spec, component) {
-      assert.ok(['sidebar.workspaces', 'plugins.bundle.config'].includes(spec.name));
+      assert.ok(['sidebar.workspaces', 'plugins.bundle.config', 'settings.plugins.tab'].includes(spec.name));
       entries.set(spec.name, { spec, component }); notify(spec.name);
       return () => { if (entries.get(spec.name)?.component === component) { entries.delete(spec.name); notify(spec.name); } };
     },
